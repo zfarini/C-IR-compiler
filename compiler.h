@@ -13,6 +13,9 @@ typedef enum {
     TOKEN_LESS_OR_EQ,
     TOKEN_GT_OR_EQ,
     TOKEN_UNKNOWN,
+    TOKEN_WHILE,
+    TOKEN_IF,
+    TOKEN_ELSE,
     TOKEN_MAX
 } TokenType;
 
@@ -31,6 +34,9 @@ enum NodeType {
     NODE_VAR,
     NODE_BINOP,
     NODE_UNARY,
+    NODE_WHILE,
+    NODE_BLOCK,
+    NODE_IF,
 };
 
 struct Node {
@@ -41,6 +47,9 @@ struct Node {
     Node    *left;
     Node    *right;
     Token   *token;
+    Node    *first_stmt;
+    Node    *next_stmt;
+    Node    *else_node;
 };
 
 typedef struct {
@@ -59,6 +68,8 @@ enum {
     OP_LESS         = '<',
     OP_GREATER      = '>',
     OP_MOV          = 256,
+    OP_JMP,
+    OP_JMPZ,
     OP_IMM_MOV,
 };
 
