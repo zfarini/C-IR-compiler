@@ -3,22 +3,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <assert.h>
-
-#define MAX_ASCII 256
-
-typedef enum {
-    TOKEN_NUMBER = MAX_ASCII,
-    TOKEN_IDENTIFIER,
-    TOKEN_UNKNOWN,
-} TokenType;
-
-typedef struct {
-    int     type;
-    char    *name;
-    int     value; 
-    int     c0;
-    int     c1;
-} Token;
+#include "compiler.h"
 
 char *ft_strchr(char *s, char c)
 {
@@ -62,7 +47,7 @@ Token *tokenize(char *s)
             token->name = calloc(i - token->c0 + 1, 1);
             memcpy(token->name, s + token->c0, i - token->c0);
         }
-        else if (ft_strchr("+-*/^()=", s[i]))
+        else if (ft_strchr("+-*/%<>()=", s[i]))
         {
             token->type = s[i];
             i++;
@@ -76,37 +61,14 @@ Token *tokenize(char *s)
     return (tokens);
 }
 
-typedef struct Node Node;
-
-enum NodeType {
-    NODE_NUMBER,
-    NODE_VAR,
-    NODE_BINOP,
-};
-
-struct Node {
-    int     type;
-    Node    *next_expr;
-    Node    *left;
-    Node    *right;
-    Token   *token;
-    int     var_idx;
-    int     value;
-};
-
-typedef struct {
-    Node    *nodes;
-    int     first_free_node;
-    Token   *tokens;
-    int     curr_token;
-} Parser;
-
 Node *make_node(Parser *p, int type)
 {
     Node *node = &p->nodes[p->first_free_node];
     p->first_free_node++;
     node->type = type;
     node->token = &p->tokens[p->curr_token];
+    node->value = node->token->value;
+    node->op = node->token->type;
     return (node);
 }
 
@@ -144,13 +106,26 @@ enum {
 struct {
     int prec;
     int assoc;
-} op_table[MAX_ASCII] = {
-    ['='] = {1, ASSOC_RIGHT},
-    ['+'] = {2, ASSOC_LEFT},
-    ['-'] = {2, ASSOC_LEFT},
-    ['*'] = {3, ASSOC_LEFT},
-    ['/'] = {3, ASSOC_LEFT},
-    ['^'] = {4, ASSOC_RIGHT},
+} op_table[TOKEN_MAX] = {
+    ['=']                   = {100, ASSOC_RIGHT},
+
+    [TOKEN_LOGICAL_AND]     = {130, ASSOC_LEFT},
+    [TOKEN_LOGICAL_OR]      = {130, ASSOC_LEFT},
+
+    [TOKEN_EQUAL]           = {140, ASSOC_LEFT},
+    [TOKEN_NOT_EQUAL]       = {140, ASSOC_LEFT},
+
+    ['<']                   = {150, ASSOC_LEFT},
+    ['>']                   = {150, ASSOC_LEFT},
+    [TOKEN_LESS_OR_EQ]      = {150, ASSOC_LEFT},
+    [TOKEN_GT_OR_EQ]        = {150, ASSOC_LEFT},
+
+    ['+']                   = {200, ASSOC_LEFT},
+    ['-']                   = {200, ASSOC_LEFT},
+
+    ['*']                   = {300, ASSOC_LEFT},
+    ['/']                   = {300, ASSOC_LEFT},
+    ['%']                   = {300, ASSOC_LEFT},
 };
 
 Token *get_curr_token(Parser *p)
@@ -186,6 +161,20 @@ Node *parse_atom(Parser *p)
         if (get_curr_token(p)->type != ')')
             printf("error: expected ')' at position %d\n", get_curr_token(p)->c0);
     }
+    else if (token->type == '+')
+    {
+        skip_token(p);
+        res = parse_atom(p);
+    }
+    else if (token->type == '-')
+    {
+        res = make_node(p, NODE_BINOP);
+        skip_token(p);
+        res->op = '-';
+        res->left = make_node(p, NODE_NUMBER);
+        res->left->value = 0;
+        res->right = parse_atom(p);
+    }
     else
     {
         printf("error: expected an atom at position %d\n", token->c0);
@@ -197,7 +186,7 @@ Node *parse_atom(Parser *p)
 
 int is_bin_op(int type)
 {
-    return ft_strchr("+-*/^=", type) != 0;
+    return ft_strchr("+-*/%=<>", type) != 0;
 }
 
 Node *parse_expr(Parser *p, int min_prec)
@@ -222,60 +211,10 @@ Node *parse_expr(Parser *p, int min_prec)
     return (res);
 }
 
-int eval(Node *node)
-{
-    int res;
-
-    if (node->type == NODE_NUMBER)
-    {
-        node->value = node->token->value;
-        res = node->value;
-    }
-    else if (node->type == NODE_BINOP)
-    {
-        int l = eval(node->left);
-        int r = eval(node->right);
-
-        switch (node->token->type)
-        {
-            case '+':
-                res =  l + r;
-                break ;
-            case '-':
-                res =  l - r;
-                break ;
-            case '*':
-                res =  l * r;
-                break ;
-            case '/':
-                res =  l / r;
-                break ;
-            case '^':
-            {
-                res = 1;
-                while (r)
-                {
-                    res *= l;
-                    r--;
-                }
-                break ;
-            }
-        }
-    }
-    else
-        assert(0);
-    node->value = res;
-    return res;
-}
-
-int curr_var_idx = 0;
-
 static struct {
     char *name;
     int reg;
 } vars_reg[128];
-
-#define array_length(arr) ((int)(sizeof(arr) / sizeof(*arr)))
 
 int get_var_register(char *name)
 {
@@ -301,27 +240,9 @@ void set_var_register(char *name, int reg)
     vars_reg[i].reg = reg;
 }
 
-enum {
-    OP_MOV,
-    OP_IMM_MOV,
-    OP_ADD = '+',
-    OP_SUB = '-',
-    OP_MUL = '*',
-    OP_DIV = '/',
-};
-
-typedef struct 
-{
-    int op;
-    int r0;
-    int r1;
-    int r2;
-} IR_Instruction;
-
 IR_Instruction  ir_code[4096];
 int             ir_inst_count;
 int             ir_reg_curr;
-
 
 IR_Instruction *add_instruction(int op)
 {
@@ -338,13 +259,13 @@ int gen_ir(Node *node)
     if (node->type == NODE_NUMBER) {
         IR_Instruction  *e = add_instruction(OP_IMM_MOV);
         e->r0 = ir_reg_curr;
-        e->r1 = node->token->value;
+        e->r1 = node->value;
         reg = ir_reg_curr++;
     }
     else if (node->type == NODE_VAR) {
         reg = get_var_register(node->token->name);
     }
-    else if (node->type == NODE_BINOP && node->token->type == '=') {
+    else if (node->type == NODE_BINOP && node->op == '=') {
         int r1 = gen_ir(node->right);
 
         IR_Instruction *e = add_instruction(OP_MOV);
@@ -360,7 +281,7 @@ int gen_ir(Node *node)
         int r1 = gen_ir(node->left);
         int r2 = gen_ir(node->right);
 
-        IR_Instruction *e = add_instruction(node->token->type);
+        IR_Instruction *e = add_instruction(node->op);
         e->r0 = ir_reg_curr;
         e->r1 = r1;
         e->r2 = r2;
@@ -371,9 +292,70 @@ int gen_ir(Node *node)
     return reg;
 }
 
+void sim_ir()
+{
+    int regs[128] = {};
+
+    int ip = 0;
+    while (ip < ir_inst_count)
+    {
+        IR_Instruction *e = &ir_code[ip];
+        
+        printf("t%d = ", e->r0);
+        if (e->op == OP_IMM_MOV)
+            printf("%d", e->r1);
+        else if (e->op == OP_MOV)
+            printf("t%d", e->r1);
+        else
+            printf("t%d %c t%d", e->r1, e->op, e->r2);
+        if (e->op == OP_IMM_MOV)
+            regs[e->r0] = e->r1;
+        else if (e->op == OP_MOV)
+            regs[e->r0] = regs[e->r1];
+        else if (e->op == OP_ADD)
+            regs[e->r0] = regs[e->r1] + regs[e->r2];
+        else if (e->op == OP_SUB)
+            regs[e->r0] = regs[e->r1] - regs[e->r2];
+        else if (e->op == OP_MUL)
+            regs[e->r0] = regs[e->r1] * regs[e->r2];
+        else if (e->op == OP_DIV)
+            regs[e->r0] = regs[e->r1] / regs[e->r2];
+        else if (e->op == OP_MOD)
+            regs[e->r0] = regs[e->r1] % regs[e->r2];
+        else if (e->op == OP_LESS)
+            regs[e->r0] = regs[e->r1] < regs[e->r2];
+        else if (e->op == OP_GREATER)
+            regs[e->r0] = regs[e->r1] > regs[e->r2];
+        else
+            assert(0);
+        printf("  // %d\n", regs[e->r0]);
+        ip++;
+    }
+}
+
+char *load_entire_file(char *filename)
+{
+    FILE *f = fopen(filename, "r");
+    if (!f)
+    {
+        printf("failed to load file: %s\n", filename);
+        assert(f);
+        return 0;
+    }
+    fseek(f, 0, SEEK_END);
+    long length = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *result = malloc(length + 1);
+    assert(result);
+    fread(result, 1, length, f);
+    result[length] = 0;
+    fclose(f);
+    return result;
+}
+
 int main()
 {
-    char *s = "a = 5\nb = 6\n";
+    char *s = load_entire_file("code.txt");
     Token *tokens = tokenize(s);
 
     for (int i = 0; tokens[i].type; i++)
@@ -390,9 +372,6 @@ int main()
     }
     printf("\n");
     Node *node = parse(tokens);
- //   int res = eval(node);
-   // printf("res = %d\n", res);
-
     while (node)
     {
         gen_ir(node);
@@ -404,6 +383,7 @@ int main()
 
     printf("IR:\n");
 
+#if 0
     for (int i = 0; i < ir_inst_count; i++)
     {
         IR_Instruction *e = &ir_code[i];
@@ -417,5 +397,6 @@ int main()
             printf("t%d %c t%d", e->r1, e->op, e->r2);
         printf("\n");
     }
-
+#endif
+    sim_ir();
 }
