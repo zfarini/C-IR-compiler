@@ -272,71 +272,108 @@ int curr_var_idx = 0;
 
 static struct {
     char *name;
-    int idx;
-} vars_indices[128];
+    int reg;
+} vars_reg[128];
 
-int get_var_idx(char *name)
+#define array_length(arr) ((int)(sizeof(arr) / sizeof(*arr)))
+
+int get_var_register(char *name)
 {
     int i = 0;
 
-    while (vars_indices[i].name && strcmp(vars_indices[i].name, name))
+    while (vars_reg[i].name && strcmp(vars_reg[i].name, name))
         i++;
-    if (!vars_indices[i].name)
+    if (!vars_reg[i].name)
     {
-      //  printf("variable '%s' used before declaration\n", name);
         return (-1);
     }
-    return vars_indices[i].idx;
+    return vars_reg[i].reg;
 }
 
-void set_var_idx(char *name, int idx)
+void set_var_register(char *name, int reg)
 {
     int i = 0;
 
-    while (vars_indices[i].name && strcmp(vars_indices[i].name, name))
+    while (vars_reg[i].name && strcmp(vars_reg[i].name, name))
         i++;
-    assert(i < 128);
-    vars_indices[i].name = name;
-    vars_indices[i].idx = idx;
+    assert(i < array_length(vars_reg));
+    vars_reg[i].name = name;
+    vars_reg[i].reg = reg;
 }
 
-void gen_ir(Node *node)
-{
-    if (node->type == NODE_NUMBER)
-    {
-        node->var_idx = curr_var_idx++;
-        printf("x%d = %d\n", node->var_idx, node->token->value);
-    }
-    else if (node->type == NODE_VAR)
-    {
-        node->var_idx = get_var_idx(node->token->name);
-    }
-    else if (node->type == NODE_BINOP && node->token->type == '=')
-    {
-        gen_ir(node->right);
+enum {
+    OP_MOV,
+    OP_IMM_MOV,
+    OP_ADD = '+',
+    OP_SUB = '-',
+    OP_MUL = '*',
+    OP_DIV = '/',
+};
 
-        node->var_idx = get_var_idx(node->left->token->name);
-        if (node->var_idx < 0)
-        {
-            node->var_idx = curr_var_idx++;
-            set_var_idx(node->left->token->name, node->var_idx);
+typedef struct 
+{
+    int op;
+    int r0;
+    int r1;
+    int r2;
+} IR_Instruction;
+
+IR_Instruction  ir_code[4096];
+int             ir_inst_count;
+int             ir_reg_curr;
+
+
+IR_Instruction *add_instruction(int op)
+{
+    IR_Instruction *e = &ir_code[ir_inst_count];
+    e->op = op;
+    ir_inst_count++;
+    return e;
+}
+
+int gen_ir(Node *node)
+{
+    int reg = -1;
+
+    if (node->type == NODE_NUMBER) {
+        IR_Instruction  *e = add_instruction(OP_IMM_MOV);
+        e->r0 = ir_reg_curr;
+        e->r1 = node->token->value;
+        reg = ir_reg_curr++;
+    }
+    else if (node->type == NODE_VAR) {
+        reg = get_var_register(node->token->name);
+    }
+    else if (node->type == NODE_BINOP && node->token->type == '=') {
+        int r1 = gen_ir(node->right);
+
+        IR_Instruction *e = add_instruction(OP_MOV);
+        e->r0 = get_var_register(node->left->token->name);
+        if (e->r0 < 0) {
+            set_var_register(node->left->token->name, ir_reg_curr);
+            e->r0 = ir_reg_curr++;
         }
-        printf("x%d = x%d // %s = x%d\n", node->var_idx, node->right->var_idx, node->left->token->name, node->var_idx);
+        e->r1 = r1;
     }
     else if (node->type == NODE_BINOP)
     {
-        gen_ir(node->left);
-        gen_ir(node->right);
-        node->var_idx = curr_var_idx++;
-        printf("x%d = x%d %c x%d // %d\n", node->var_idx, node->left->var_idx, node->token->type, node->right->var_idx, node->value);
+        int r1 = gen_ir(node->left);
+        int r2 = gen_ir(node->right);
+
+        IR_Instruction *e = add_instruction(node->token->type);
+        e->r0 = ir_reg_curr;
+        e->r1 = r1;
+        e->r2 = r2;
+        reg = ir_reg_curr++;
     }
     else
         assert(0);
+    return reg;
 }
 
 int main()
 {
-    char *s = "a = 5\na = a * 2\n";
+    char *s = "a = 5\nb = 6\n";
     Token *tokens = tokenize(s);
 
     for (int i = 0; tokens[i].type; i++)
@@ -361,4 +398,24 @@ int main()
         gen_ir(node);
         node = node->next_expr;
     }
+    printf("variables:\n");
+    for (int i = 0; vars_reg[i].name; i++)
+        printf("%s -> t%d\n", vars_reg[i].name, vars_reg[i].reg);
+
+    printf("IR:\n");
+
+    for (int i = 0; i < ir_inst_count; i++)
+    {
+        IR_Instruction *e = &ir_code[i];
+
+        printf("t%d = ", e->r0);
+        if (e->op == OP_IMM_MOV)
+            printf("%d", e->r1);
+        else if (e->op == OP_MOV)
+            printf("t%d", e->r1);
+        else
+            printf("t%d %c t%d", e->r1, e->op, e->r2);
+        printf("\n");
+    }
+
 }
