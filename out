@@ -1,28 +1,7 @@
-Ident(a) ('=') Number(5) Ident(while) ('(') Ident(a) ('<') Number(525200) (')') ('{') Ident(if) ('(') Ident(a) ('>') Number(255) (')') Ident(a) ('=') Ident(a) ('*') Number(4) Ident(else) Ident(a) ('=') Ident(a) ('+') Number(1) ('}') 
-4: 12
-variables:
-a -> t1
-IR:
-t0 = 5
-t1 = t0
-L0:
-t2 = 525200
-t3 = t1 < t2
-jmpz t3, L1
-L2:
-t4 = 255
-t5 = t1 > t4
-jmpz t5, L4
-t6 = 4
-t7 = t1 * t6
-t1 = t7
-jmp L3
-L4:
-t8 = 1
-t9 = t1 + t8
-t1 = t9
-L3:
-jmp L0
-L1:
+dup: # t1
+    t0 = t1 * t2
+    jmp t2  
 
-a -> 1048576
+t1 = 3
+t2 = ip + 2
+jmp dup

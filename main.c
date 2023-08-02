@@ -54,6 +54,8 @@ Token *tokenize(char *s)
                 token->type = TOKEN_IF;
             else if (!strcmp(token->name, "else"))
                 token->type = TOKEN_ELSE;
+            else if (!strcmp(token->name, "fn"))
+                token->type = TOKEN_FN;
 
         }
         else if (ft_strchr("+-*/%<>()=;{}", s[i]))
@@ -98,6 +100,7 @@ Token *skip_token(Parser *p)
     return token;
 }
 
+Node *parse_function(Parser *p);
 Node *parse_statement(Parser *p);
 Node *parse_expr(Parser *p, int min_prec);
 Node *parse_atom(Parser *p);
@@ -120,12 +123,26 @@ Node *parse(Token *tokens)
 
     while (p.tokens[p.curr_token].type)
     {
-
-        curr->next_expr = parse_statement(&p);
-
+        if (p.tokens[p.curr_token].type == TOKEN_FN)
+            curr->next_expr = parse_function(&p);
+        else
+            curr->next_expr = parse_statement(&p);
         curr = curr->next_expr;
     }
     return res;
+}
+
+Node *parse_function(Parser *p)
+{
+    skip_token(p);
+    Node *node = make_node(p, NODE_FUNC);
+    skip_token(p);
+
+    skip_token(p);
+    // read args
+    skip_token(p);
+    node->left = parse_statement(p);
+    return node;
 }
 
 Node *parse_statement(Parser *p)
@@ -192,6 +209,13 @@ Node *parse_atom(Parser *p)
     else if (token->type == TOKEN_IDENTIFIER) {
         res = make_node(p, NODE_VAR);
         skip_token(p);
+        if (get_curr_token(p)->type == '(')
+        {
+            skip_token(p);
+            // read args
+            skip_token(p);
+            res->type = NODE_CALL;
+        }
     }
     else if (token->type == '(') {
         skip_token(p);
@@ -343,6 +367,9 @@ int gen_ir(Node *node)
             reg = ir_reg_curr++;
             set_var_register(node->token->name, reg);
         }
+    }
+    else if (node->type == NODE_CALL) {
+ //       IR_Instruction *e = add_instruction(OP_JMP);
     }
     else if (node->type == NODE_BINOP && node->op == '=') {
         int r1 = gen_ir(node->right);
@@ -700,16 +727,16 @@ int main()
     printf("IR:\n");
     print_ir();
 
-    pthread_t thread;
-    pthread_create(&thread, 0, sim_ir, 0);
-    pthread_join(thread, 0);
+   // pthread_t thread;
+   // pthread_create(&thread, 0, sim_ir, 0);
+   // pthread_join(thread, 0);
 
 
-    optimize_ir();
-    printf("Optimized:\n");
-    print_ir();
-    
-    pthread_create(&thread, 0, sim_ir, 0);
-    pthread_join(thread, 0);
+   // optimize_ir();
+   // printf("Optimized:\n");
+   // print_ir();
+   // 
+   // pthread_create(&thread, 0, sim_ir, 0);
+   // pthread_join(thread, 0);
 
 }

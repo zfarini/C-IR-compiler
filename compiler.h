@@ -16,6 +16,7 @@ typedef enum {
     TOKEN_WHILE,
     TOKEN_IF,
     TOKEN_ELSE,
+    TOKEN_FN,
     TOKEN_MAX
 } TokenType;
 
@@ -30,6 +31,8 @@ typedef struct {
 typedef struct Node Node;
 
 enum NodeType {
+    NODE_FUNC,
+    NODE_CALL,
     NODE_NUMBER,
     NODE_VAR,
     NODE_BINOP,
