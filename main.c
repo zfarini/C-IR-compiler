@@ -522,10 +522,20 @@ void optimize_ir()
     while (i < ir_inst_count)
     {
         IR_Instruction *e = &ir_code[i];
+
+        for (int j = 0; j < curr_label; j++)
+        {
+            if (labels[j] == i)
+            {
+                memset(last_write, -1, sizeof(last_write));
+                break ;
+            }
+        }
         if (e->op == OP_MOV)
         {
             if (!e->r1_imm && last_write[e->r1] != -1)
             {
+
                 // if a register was used once to store and immideatly got assigned to another
                 int expand = !is_var_reg[e->r1];
                 for (int j = i + 1; j < ir_inst_count && expand; j++)
@@ -542,9 +552,11 @@ void optimize_ir()
                 {
                     e->r1_imm = ir_code[last_write[e->r1]].r1_imm;
                     e->r1 = ir_code[last_write[e->r1]].r1;
+
                 }
             }
         }
+#if 1
         else if (e->op < OP_BINARY)
         {
             if (!e->r1_imm && last_write[e->r1] != -1 && 
@@ -565,7 +577,11 @@ void optimize_ir()
                 e->op = OP_MOV;
             }
         }
-        last_write[e->r0] = i;
+#endif
+        if (e->op != OP_JMP && e->op != OP_JMPZ)
+            last_write[e->r0] = i;
+        else
+            memset(last_write, -1, sizeof(last_write));
         i++;
     }
 
@@ -584,6 +600,8 @@ void optimize_ir()
             ;
         else if (e->op == OP_MOV)
             r2 = -1;
+        else if (e->op == OP_JMPZ)
+            r1 = e->r0, r2 = -1;
         else
             r1 = -1, r2 = -1;
         if (!e->r1_imm && r1 != -1)
@@ -591,13 +609,20 @@ void optimize_ir()
         if (!e->r2_imm && r2 != -1)
             last_read[r2] = i;
         
-        if (last_read[e->r0] == -1 && !is_var_reg[e->r0])
+        if (e->op <= OP_MOV && last_read[e->r0] == -1 && !is_var_reg[e->r0])
         {
+
+            for (int j = 0; j < curr_label; j++)
+            {
+                if (labels[j] > i)
+                    labels[j]--;
+            }
             for (int j = i + 1; j < ir_inst_count; j++)
                 ir_code[j - 1] = ir_code[j];
             ir_inst_count--;
         }
-        last_read[e->r0] = -1;
+        if (e->op != OP_JMP && e->op != OP_JMPZ)
+            last_read[e->r0] = -1;
         i--;
     }
 #endif
@@ -611,9 +636,9 @@ void print_ir()
         IR_Instruction *e = &ir_code[i];
 
         // labels can be unordered
-   //     for (int j = 0; j < curr_label; j++)
-   //         if (labels[j] == i)
-   //             printf("L%d:\n", j);
+        for (int j = 0; j < curr_label; j++)
+            if (labels[j] == i)
+                printf("L%d:\n", j);
 
         if (e->op == OP_JMP)
             printf("jmp L%d", e->r0);
@@ -632,12 +657,12 @@ void print_ir()
         }
         printf("\n");
     }
-   // for (int j = 0; j < curr_label; j++)
-   // {
-   //     if (labels[j] == ir_inst_count)
-   //         printf("L%d:\n", j);
-   //     assert(labels[j] <= ir_inst_count);
-   // }
+    for (int j = 0; j < curr_label; j++)
+    {
+        if (labels[j] == ir_inst_count)
+            printf("L%d:\n", j);
+        assert(labels[j] <= ir_inst_count);
+    }
    // printf("\n");
 }
 int main()
@@ -684,6 +709,7 @@ int main()
     printf("Optimized:\n");
     print_ir();
     
-
+    pthread_create(&thread, 0, sim_ir, 0);
+    pthread_join(thread, 0);
 
 }
