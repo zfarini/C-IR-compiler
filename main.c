@@ -47,7 +47,7 @@ int main()
     char *s = load_entire_file("code.txt");
     Token *tokens = tokenize(s);
 
-#if 1
+#if 0
     for (int i = 0; tokens[i].type; i++)
     {
         printf("'");

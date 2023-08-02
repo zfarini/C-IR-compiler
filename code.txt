@@ -3,7 +3,7 @@ b = 1
 c = 1
 n = 19
 i = 0
-while (i < n)
+while (i <= n)
 {
    c = a + b
    a = b

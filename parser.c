@@ -1,5 +1,12 @@
 #include "compiler.h"
 
+void error_token(Token *tok, char *s)
+{
+    printf("\033[1;37m%d:%d: \033[1;31merror: \033[1;37m%s\033[0m\n",
+            tok->line, tok->col, s);
+    exit(0);
+}
+
 Node *make_node(Parser *p, int type)
 {
     Node *node = &p->nodes[p->first_free_node];
@@ -114,17 +121,13 @@ Node *parse_statement(Parser *p)
     else
     {
         node = parse_expr(p, 0);
-        //if (get_curr_token(p)->type == ';')
-        //    skip_token(p);
-        //else
-        //    printf("expected ';' at the end of expression\n");
     }
     return (node);
 }
 
 Node *parse_atom(Parser *p)
 {
-    Node *res;
+    Node *res = 0;
 
     Token *token = get_curr_token(p);
     if (token->type == TOKEN_NUMBER) {
@@ -146,17 +149,15 @@ Node *parse_atom(Parser *p)
         skip_token(p);
         res = parse_expr(p, 0);
         if (get_curr_token(p)->type != ')')
-            printf("error: expected ')' at position %d\n", get_curr_token(p)->c0);
+            error_token(get_curr_token(p), "expected ')'");
         else
             skip_token(p);
     }
-    else if (token->type == '+')
-    {
+    else if (token->type == '+') {
         skip_token(p);
         res = parse_atom(p);
     }
-    else if (token->type == '-')
-    {
+    else if (token->type == '-') {
         res = make_node(p, NODE_BINOP);
         skip_token(p);
         res->op = '-';
@@ -165,11 +166,7 @@ Node *parse_atom(Parser *p)
         res->right = parse_atom(p);
     }
     else
-    {
-        printf("error: expected an atom at position %d\n", token->c0);
-        exit(1);
-    }
-
+        error_token(get_curr_token(p), "expected an expression");
     return (res);
 }
 
