@@ -1,20 +1,31 @@
 #include "compiler.h"
+#include <stdarg.h>
 
-void error_token(Token *tok, char *s)
+void error_token(Token *token, char *fmt, ...)
 {
-    printf("\033[1;37m%d:%d: \033[1;31merror: \033[1;37m%s\033[0m\n",
-            tok->line, tok->col, s);
-    exit(0);
+    fprintf(stderr, "\033[1;37m%d:%d: \033[1;31merror: \033[1;37m",
+            token->line, token->col);
+    
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+
+    fprintf(stderr, "\033[0m\n");
+    exit(1);
 }
 
 Node *make_node(Parser *p, int type)
 {
     Node *node = &p->nodes[p->first_free_node];
-    p->first_free_node++;
+
     node->type = type;
     node->token = &p->tokens[p->curr_token];
     node->value = node->token->value;
     node->op = node->token->type;
+
+    p->first_free_node++;
+
     return (node);
 }
 
@@ -53,8 +64,7 @@ Node *parse(Token *tokens)
     Node *res = parse_statement(&p);
     Node *curr = res;
 
-    while (p.tokens[p.curr_token].type)
-    {
+    while (p.tokens[p.curr_token].type) {
         if (p.tokens[p.curr_token].type == TOKEN_FN)
             curr->next_expr = parse_function(&p);
         else
@@ -81,34 +91,30 @@ Node *parse_statement(Parser *p)
 {
     Node *node;
 
-    if (get_curr_token(p)->type == TOKEN_WHILE)
-    {
+    if (get_curr_token(p)->type == TOKEN_WHILE) {
         node = make_node(p, NODE_WHILE);
         skip_token(p);
         node->left = parse_atom(p);
         node->right = parse_statement(p);
     }
-    else if (get_curr_token(p)->type == TOKEN_IF)
-    {
+    else if (get_curr_token(p)->type == TOKEN_IF) {
         node = make_node(p, NODE_IF);
         skip_token(p);
         node->left = parse_atom(p);
         node->right = parse_statement(p);
-        if (get_curr_token(p)->type == TOKEN_ELSE)
-        {
+
+        if (get_curr_token(p)->type == TOKEN_ELSE) {
             skip_token(p);
             node->else_node = parse_statement(p);
         }
     }
-    else if (get_curr_token(p)->type == '{')
-    {
+    else if (get_curr_token(p)->type == '{') {
         node = make_node(p, NODE_BLOCK);
         skip_token(p);
+
         Node *curr = node;
-        
         while (get_curr_token(p)->type &&
-               get_curr_token(p)->type != '}')
-        {
+               get_curr_token(p)->type != '}') {
             Node *n = parse_statement(p);
             if (curr == node)
                 node->first_stmt = n;
@@ -118,8 +124,7 @@ Node *parse_statement(Parser *p)
         }
         skip_token(p);
     }
-    else
-    {
+    else {
         node = parse_expr(p, 0);
     }
     return (node);
@@ -130,6 +135,7 @@ Node *parse_atom(Parser *p)
     Node *res = 0;
 
     Token *token = get_curr_token(p);
+
     if (token->type == TOKEN_NUMBER) {
         res = make_node(p, NODE_NUMBER);
         skip_token(p);
@@ -137,8 +143,8 @@ Node *parse_atom(Parser *p)
     else if (token->type == TOKEN_IDENTIFIER) {
         res = make_node(p, NODE_VAR);
         skip_token(p);
-        if (get_curr_token(p)->type == '(')
-        {
+
+        if (get_curr_token(p)->type == '(') {
             skip_token(p);
             // read args
             skip_token(p);
@@ -176,12 +182,17 @@ int is_bin_op(int type)
         (type > TOKEN_BINARY_BEGIN && type < TOKEN_BINARY_END));
 }
 
+/*
+    ref: https://eli.thegreenplace.net/2012/08/02/parsing-expressions-by-precedence-climbing
+    so much simpler than RD parser
+*/
 Node *parse_expr(Parser *p, int min_prec)
 {
     enum {
         ASSOC_LEFT,
         ASSOC_RIGHT,
     };
+    // make sure the compiler doesn't init this every time
     struct {
         int prec;
         int assoc;
@@ -211,6 +222,7 @@ Node *parse_expr(Parser *p, int min_prec)
     
     while (1) {
         Token *token = get_curr_token(p);
+
         if (!is_bin_op(token->type) || op_table[token->type].prec < min_prec)
             break;
 
@@ -224,5 +236,6 @@ Node *parse_expr(Parser *p, int min_prec)
         node->right = parse_expr(p, next_prec);
         res = node;
     }
+
     return (res);
 }

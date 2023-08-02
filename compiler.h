@@ -105,4 +105,6 @@ typedef struct
     int r2_imm;
 } IR_Instruction;
 
+
+void error_token(Token *token, char *fmt, ...);
 #endif

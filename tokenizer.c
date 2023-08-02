@@ -1,5 +1,9 @@
 #include "compiler.h"
 
+/*
+    we propably need to deal with '\r' ?
+    DON'T try to optimize / simply code until we write the preprocessor
+*/
 Token *tokenize(char *s)
 {
     struct {
@@ -23,14 +27,17 @@ Token *tokenize(char *s)
         {"||",      TOKEN_LOGICAL_OR},
     };
 
-    Token   *tokens = calloc(sizeof(Token), strlen(s) + 1);
+    int max_token_count = strlen(s) + 1;
+    Token   *tokens = calloc(sizeof(Token), max_token_count);
+
     int     i = 0;
     int     j = 0;
     int     line = 1;
     int     col = 1;
     
     while (s[i]) {
-        while (isspace(s[i])) {
+        while (isspace(s[i])) { // @Speed: a tab might be 4/8 spaces maybe we want something faster
+                                // here
             if (s[i] == '\n') {
                 line++;
                 col = 1;
@@ -59,39 +66,45 @@ Token *tokenize(char *s)
             token->type = TOKEN_IDENTIFIER;
             while (isalnum(s[i]) || s[i] == '_')
                 i++;
+
             token->name = calloc(i - token->c0 + 1, 1);
             memcpy(token->name, s + token->c0, i - token->c0);
+            // @Speed
             for (int j = 0; j < array_length(keywords); j++) {
-                if (!strcmp(token->name, keywords[j].name)) {
+                if (!strcmp(token->name, keywords[j].name)) { 
                     token->type = keywords[j].type;
                     break ;
                 }
             }
         }
         else {
+            // @Speed
             for (int j = 0; j < array_length(multi_char_tokens); j++) {
-                int len = strlen(multi_char_tokens[j].name); // fix
+                int len = strlen(multi_char_tokens[j].name);
                 if (!strncmp(s + i, multi_char_tokens[j].name, len)) {
                     token->type = multi_char_tokens[j].type;
                     i += len;
                     break ;
                 }
             }
+            
             if (token->type == TOKEN_UNKNOWN) {
                 if (find_char_in_str("+-*/%<>()=;{}!", s[i])) {
                     token->type = s[i];
                     i++;
                 }
-                else {
-                    printf("unknown token '%c' (ascii %d)\n", s[i], s[i]);
-                    exit(0);
-                }
+                else
+                    error_token(token, "unkown token '%c' (ascii %d)", s[i], s[i]); 
             }
         }
+
         token->c1 = i;
         j++;
         col++;
     }
+    
+    assert(j < max_token_count);
     tokens[j].c0 = i;
+
     return (tokens);
 }
