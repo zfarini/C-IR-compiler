@@ -67,10 +67,13 @@ enum {
     OP_MOD          = '%',
     OP_LESS         = '<',
     OP_GREATER      = '>',
-    OP_MOV          = 256,
+    
+    OP_BINARY,
+
+    OP_MOV,
+
     OP_JMP,
     OP_JMPZ,
-    OP_IMM_MOV,
 };
 
 typedef struct 
@@ -79,6 +82,8 @@ typedef struct
     int r0;
     int r1;
     int r2;
+    int r1_imm;
+    int r2_imm;
 } IR_Instruction;
 
 #endif

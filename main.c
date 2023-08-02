@@ -330,13 +330,19 @@ int gen_ir(Node *node)
     int reg = -1;
 
     if (node->type == NODE_NUMBER) {
-        IR_Instruction  *e = add_instruction(OP_IMM_MOV);
+        IR_Instruction  *e = add_instruction(OP_MOV);
         e->r0 = ir_reg_curr;
         e->r1 = node->value;
+        e->r1_imm = 1;
         reg = ir_reg_curr++;
     }
     else if (node->type == NODE_VAR) {
         reg = get_var_register(node->token->name);
+        if (reg < 0)
+        {
+            reg = ir_reg_curr++;
+            set_var_register(node->token->name, reg);
+        }
     }
     else if (node->type == NODE_BINOP && node->op == '=') {
         int r1 = gen_ir(node->right);
@@ -413,6 +419,30 @@ int gen_ir(Node *node)
     return reg;
 }
 
+
+int eval_op(int op, int r1, int r2)
+{
+    int res = 0;
+
+    if (op == OP_ADD)
+        res = r1 + r2;
+    else if (op == OP_SUB)
+        res = r1 - r2;
+    else if (op == OP_MUL)
+        res = r1 * r2;
+    else if (op == OP_DIV)
+        res = r1 / r2;
+    else if (op == OP_MOD)
+        res = r1 % r2;
+    else if (op == OP_LESS)
+        res = r1 < r2;
+    else if (op == OP_GREATER)
+        res = r1 > r2;
+    else
+        assert(0);
+    return res;
+}
+
 void *sim_ir(void *arg)
 {
     (void)arg;
@@ -424,6 +454,9 @@ void *sim_ir(void *arg)
     {
         IR_Instruction *e = &ir_code[ip];
         
+        int r1_value = (e->r1_imm ? e->r1 : regs[e->r1]);
+        int r2_value = (e->r2_imm ? e->r2 : regs[e->r2]);
+
         if (e->op == OP_JMP)
         {
             ip = labels[e->r0];
@@ -437,24 +470,11 @@ void *sim_ir(void *arg)
                 continue ;
             }
         }
-        else if (e->op == OP_IMM_MOV)
-            regs[e->r0] = e->r1;
+        else if (e->op < OP_BINARY)
+            regs[e->r0] = eval_op(e->op, r1_value, r2_value);
         else if (e->op == OP_MOV)
-            regs[e->r0] = regs[e->r1];
-        else if (e->op == OP_ADD)
-            regs[e->r0] = regs[e->r1] + regs[e->r2];
-        else if (e->op == OP_SUB)
-            regs[e->r0] = regs[e->r1] - regs[e->r2];
-        else if (e->op == OP_MUL)
-            regs[e->r0] = regs[e->r1] * regs[e->r2];
-        else if (e->op == OP_DIV)
-            regs[e->r0] = regs[e->r1] / regs[e->r2];
-        else if (e->op == OP_MOD)
-            regs[e->r0] = regs[e->r1] % regs[e->r2];
-        else if (e->op == OP_LESS)
-            regs[e->r0] = regs[e->r1] < regs[e->r2];
-        else if (e->op == OP_GREATER)
-            regs[e->r0] = regs[e->r1] > regs[e->r2];
+            regs[e->r0] = r1_value;
+
         else
             assert(0);
         ip++;
@@ -486,6 +506,140 @@ char *load_entire_file(char *filename)
     return result;
 }
 
+
+
+void optimize_ir()
+{
+    int i = 0;
+    
+    int last_write[256] = {0};
+    memset(last_write, -1, sizeof(last_write));
+
+    int is_var_reg[256] = {0};
+    for (int j = 0; vars_reg[j].name; j++)
+        is_var_reg[vars_reg[j].reg] = 1;
+
+    while (i < ir_inst_count)
+    {
+        IR_Instruction *e = &ir_code[i];
+        if (e->op == OP_MOV)
+        {
+            if (!e->r1_imm && last_write[e->r1] != -1)
+            {
+                // if a register was used once to store and immideatly got assigned to another
+                int expand = !is_var_reg[e->r1];
+                for (int j = i + 1; j < ir_inst_count && expand; j++)
+                    if ((!ir_code[j].r1_imm && ir_code[j].r1 == e->r1) || 
+                        (!ir_code[j].r2_imm && ir_code[j].r2 == e->r1))
+                        expand = 0;
+                if (expand)
+                {
+                    int dest = e->r0;
+                    *e = ir_code[last_write[e->r1]];
+                    e->r0 = dest;
+                }
+                else if (ir_code[last_write[e->r1]].op == OP_MOV)
+                {
+                    e->r1_imm = ir_code[last_write[e->r1]].r1_imm;
+                    e->r1 = ir_code[last_write[e->r1]].r1;
+                }
+            }
+        }
+        else if (e->op < OP_BINARY)
+        {
+            if (!e->r1_imm && last_write[e->r1] != -1 && 
+                    ir_code[last_write[e->r1]].op == OP_MOV)
+            {
+                e->r1_imm = ir_code[last_write[e->r1]].r1_imm;
+                e->r1 = ir_code[last_write[e->r1]].r1;
+            }
+            if (!e->r2_imm && last_write[e->r2] != -1 && 
+                    ir_code[last_write[e->r2]].op == OP_MOV)
+            {
+                e->r2_imm = ir_code[last_write[e->r2]].r1_imm;
+                e->r2 = ir_code[last_write[e->r2]].r1;
+            }
+            if (e->r1_imm && e->r2_imm)
+            {
+                e->r1 = eval_op(e->op, e->r1, e->r2);
+                e->op = OP_MOV;
+            }
+        }
+        last_write[e->r0] = i;
+        i++;
+    }
+
+#if 1
+
+    // remove instruction that aren't read
+    int last_read[256] = {0};
+    memset(last_read, -1, sizeof(last_read));
+    i = ir_inst_count - 1;
+    while (i >= 0)
+    {
+        IR_Instruction *e = &ir_code[i];
+        int r1 = e->r1, r2 = e->r2;
+
+        if (e->op < OP_BINARY)
+            ;
+        else if (e->op == OP_MOV)
+            r2 = -1;
+        else
+            r1 = -1, r2 = -1;
+        if (!e->r1_imm && r1 != -1)
+            last_read[r1] = i;
+        if (!e->r2_imm && r2 != -1)
+            last_read[r2] = i;
+        
+        if (last_read[e->r0] == -1 && !is_var_reg[e->r0])
+        {
+            for (int j = i + 1; j < ir_inst_count; j++)
+                ir_code[j - 1] = ir_code[j];
+            ir_inst_count--;
+        }
+        last_read[e->r0] = -1;
+        i--;
+    }
+#endif
+}
+
+void print_ir()
+{
+    printf("count: %d\n", ir_inst_count);
+    for (int i = 0; i < ir_inst_count; i++)
+    {
+        IR_Instruction *e = &ir_code[i];
+
+        // labels can be unordered
+   //     for (int j = 0; j < curr_label; j++)
+   //         if (labels[j] == i)
+   //             printf("L%d:\n", j);
+
+        if (e->op == OP_JMP)
+            printf("jmp L%d", e->r0);
+        else if (e->op == OP_JMPZ)
+            printf("jmpz t%d, L%d", e->r0, e->r1);
+        else
+        {
+            printf("t%d = ", e->r0);
+            if (e->op == OP_MOV)
+                printf("%s%d", e->r1_imm ? "" : "t", e->r1);
+            else
+            {
+                printf("%s%d %c %s%d", e->r1_imm ? "" : "t", e->r1,
+                        e->op, e->r2_imm ? "" : "t", e->r2);
+            }
+        }
+        printf("\n");
+    }
+   // for (int j = 0; j < curr_label; j++)
+   // {
+   //     if (labels[j] == ir_inst_count)
+   //         printf("L%d:\n", j);
+   //     assert(labels[j] <= ir_inst_count);
+   // }
+   // printf("\n");
+}
 int main()
 {
     char *s = load_entire_file("code.txt");
@@ -514,44 +668,22 @@ int main()
     for (int i = 0; vars_reg[i].name; i++)
         printf("%s -> t%d\n", vars_reg[i].name, vars_reg[i].reg);
 
-    printf("IR:\n");
 
 #if 1
-    for (int i = 0; i < ir_inst_count; i++)
-    {
-        IR_Instruction *e = &ir_code[i];
 
-        // labels can be unordered
-        for (int j = 0; j < curr_label; j++)
-            if (labels[j] == i)
-                printf("L%d:\n", j);
-
-        if (e->op == OP_JMP)
-            printf("jmp L%d", e->r0);
-        else if (e->op == OP_JMPZ)
-            printf("jmpz t%d, L%d", e->r0, e->r1);
-        else
-        {
-            printf("t%d = ", e->r0);
-            if (e->op == OP_IMM_MOV)
-                printf("%d", e->r1);
-            else if (e->op == OP_MOV)
-                printf("t%d", e->r1);
-            else
-                printf("t%d %c t%d", e->r1, e->op, e->r2);
-        }
-        printf("\n");
-    }
-    for (int j = 0; j < curr_label; j++)
-    {
-        if (labels[j] == ir_inst_count)
-            printf("L%d:\n", j);
-        assert(labels[j] <= ir_inst_count);
-    }
 #endif
+    printf("IR:\n");
+    print_ir();
 
     pthread_t thread;
     pthread_create(&thread, 0, sim_ir, 0);
-
     pthread_join(thread, 0);
+
+
+    optimize_ir();
+    printf("Optimized:\n");
+    print_ir();
+    
+
+
 }
