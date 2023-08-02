@@ -1,9 +1,12 @@
-if (a < 2)
+a = 0
+b = 1
+c = 1
+n = 19
+i = 0
+while (i < n)
 {
-    a = a * 3
+   c = a + b
+   a = b
+   b = c
+   i = i + 1
 }
-else
-{
-    a = a * 2
-}
-b = a * 6

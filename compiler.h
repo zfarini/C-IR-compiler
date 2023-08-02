@@ -2,16 +2,24 @@
 #define COMPILER_H
 
 #define array_length(arr) ((int)(sizeof(arr) / sizeof(*arr)))
+#define global static
+#define internal static
+#define local static
 
 typedef enum {
     TOKEN_NUMBER = 256,
     TOKEN_IDENTIFIER,
+
+
+    TOKEN_BINARY_BEGIN,
     TOKEN_LOGICAL_AND,
     TOKEN_LOGICAL_OR,
     TOKEN_EQUAL,
     TOKEN_NOT_EQUAL,
-    TOKEN_LESS_OR_EQ,
-    TOKEN_GT_OR_EQ,
+    TOKEN_LESS_OR_EQUAL,
+    TOKEN_GREATER_OR_EQUAL,
+    TOKEN_BINARY_END,
+
     TOKEN_UNKNOWN,
     TOKEN_WHILE,
     TOKEN_IF,
@@ -24,6 +32,8 @@ typedef struct {
     int     type;
     char    *name;
     int     value; 
+    int     line;
+    int     col;
     int     c0;
     int     c1;
 } Token;
@@ -70,6 +80,12 @@ enum {
     OP_MOD          = '%',
     OP_LESS         = '<',
     OP_GREATER      = '>',
+    OP_NOT          = '!',
+
+    OP_EQUAL = 256,
+    OP_LESS_OR_EQUAL,
+    OP_GREATER_OR_EQUAL,
+    OP_NOT_EQUAL,
     
     OP_BINARY,
 
