@@ -1,12 +1,21 @@
 #ifndef COMPILER_H
 #define COMPILER_H
 
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <pthread.h>
+#include <unistd.h>
+
 #define array_length(arr) ((int)(sizeof(arr) / sizeof(*arr)))
 #define global static
 #define internal static
 #define local static
 
-typedef enum {
+typedef enum
+{
     TOKEN_NUMBER = 256,
     TOKEN_IDENTIFIER,
 
@@ -28,7 +37,8 @@ typedef enum {
     TOKEN_MAX
 } TokenType;
 
-typedef struct {
+typedef struct
+{
     int     type;
     char    *name;
     int     value; 
@@ -40,7 +50,8 @@ typedef struct {
 
 typedef struct Node Node;
 
-enum NodeType {
+enum NodeType
+{
     NODE_FUNC,
     NODE_CALL,
     NODE_NUMBER,
@@ -52,7 +63,8 @@ enum NodeType {
     NODE_IF,
 };
 
-struct Node {
+struct Node
+{
     int     type;
     int     op;
     int     value;
@@ -65,14 +77,16 @@ struct Node {
     Node    *else_node;
 };
 
-typedef struct {
+typedef struct
+{
     Node    *nodes;
     int     first_free_node;
     Token   *tokens;
     int     curr_token;
 } Parser;
 
-enum {
+enum
+{
     OP_ADD          = '+',
     OP_SUB          = '-',
     OP_MUL          = '*',
@@ -105,6 +119,6 @@ typedef struct
     int r2_imm;
 } IR_Instruction;
 
-
 void error_token(Token *token, char *fmt, ...);
+
 #endif

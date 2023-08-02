@@ -6,19 +6,24 @@
 */
 Token *tokenize(char *s)
 {
-    struct {
+    struct
+    {
         char *name;
         int type;
-    } keywords[] = {
+    } keywords[] =
+    {
         {"while",       TOKEN_WHILE},
         {"if",          TOKEN_IF},
         {"else",        TOKEN_ELSE},
         {"fn",          TOKEN_FN},
     };
-    struct {
+
+    struct
+    {
         char *name;
         int type;
-    } multi_char_tokens[] = {
+    } multi_char_tokens[] =
+    {
         {"==",      TOKEN_EQUAL},
         {"!=",      TOKEN_NOT_EQUAL},
         {"<=",      TOKEN_LESS_OR_EQUAL},
@@ -35,10 +40,13 @@ Token *tokenize(char *s)
     int     line = 1;
     int     col = 1;
     
-    while (s[i]) {
-        while (isspace(s[i])) { // @Speed: a tab might be 4/8 spaces maybe we want something faster
-                                // here
-            if (s[i] == '\n') {
+    while (s[i])
+    {
+         // @Speed: a tab might be 4/8 spaces maybe we want something faster
+        while (isspace(s[i]))
+        {
+            if (s[i] == '\n')
+            {
                 line++;
                 col = 1;
             }
@@ -55,14 +63,17 @@ Token *tokenize(char *s)
         token->col = col;
         token->c0 = i;
 
-        if (isdigit(s[i])) {
+        if (isdigit(s[i]))
+        {
             token->type = TOKEN_NUMBER;
-            while (isdigit(s[i])) {
+            while (isdigit(s[i]))
+            {
                 token->value = token->value * 10 + (s[i] - '0');
                 i++;
             }
         }
-        else if (isalpha(s[i]) || s[i] == '_') {
+        else if (isalpha(s[i]) || s[i] == '_')
+        {
             token->type = TOKEN_IDENTIFIER;
             while (isalnum(s[i]) || s[i] == '_')
                 i++;
@@ -70,8 +81,10 @@ Token *tokenize(char *s)
             token->name = calloc(i - token->c0 + 1, 1);
             memcpy(token->name, s + token->c0, i - token->c0);
             // @Speed
-            for (int j = 0; j < array_length(keywords); j++) {
-                if (!strcmp(token->name, keywords[j].name)) { 
+            for (int j = 0; j < array_length(keywords); j++)
+            {
+                if (!strcmp(token->name, keywords[j].name))
+                {
                     token->type = keywords[j].type;
                     break ;
                 }
@@ -79,17 +92,21 @@ Token *tokenize(char *s)
         }
         else {
             // @Speed
-            for (int j = 0; j < array_length(multi_char_tokens); j++) {
+            for (int j = 0; j < array_length(multi_char_tokens); j++)
+            {
                 int len = strlen(multi_char_tokens[j].name);
-                if (!strncmp(s + i, multi_char_tokens[j].name, len)) {
+                if (!strncmp(s + i, multi_char_tokens[j].name, len))
+                {
                     token->type = multi_char_tokens[j].type;
                     i += len;
                     break ;
                 }
             }
             
-            if (token->type == TOKEN_UNKNOWN) {
-                if (find_char_in_str("+-*/%<>()=;{}!", s[i])) {
+            if (token->type == TOKEN_UNKNOWN)
+            {
+                if (find_char_in_str("+-*/%<>()=;{}!", s[i]))
+                {
                     token->type = s[i];
                     i++;
                 }

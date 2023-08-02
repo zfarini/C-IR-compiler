@@ -1,15 +1,9 @@
-#include <stdio.h>
-#include <string.h>
-#include <ctype.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <pthread.h>
-#include <unistd.h>
 #include "compiler.h"
 
 char *find_char_in_str(char *s, char c)
 {
-    while (*s) {
+    while (*s)
+    {
         if (*s == c)
             return s;
         s++;
@@ -24,7 +18,8 @@ char *find_char_in_str(char *s, char c)
 char *load_entire_file(char *filename)
 {
     FILE *f = fopen(filename, "r");
-    if (!f) {
+    if (!f)
+    {
         printf("failed to load file: %s\n", filename);
         assert(f);
         return 0;
