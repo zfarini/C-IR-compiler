@@ -1,12 +1,11 @@
-a = 0
-b = 1
-c = 1
-n = 19
-i = 0
-while (i <= n)
+a = 5
+if (a < 5)
 {
-   c = a + b
-   a = b
-   b = c
-   i = i + 1
+    b = a * 4
 }
+else
+{
+    b = a * 3
+}
+
+b = a * 2

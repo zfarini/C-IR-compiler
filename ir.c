@@ -265,6 +265,26 @@ void sim_ir_code(IR_Code *c)
     }
 }
 
+void print_instruction(IR_Instruction *e, int in_block)
+{
+    if (e->op == OP_JMP)
+        printf("jmp %s%d", (in_block ? "B" : "L"), e->r0);
+    else if (e->op == OP_JMPZ)
+        printf("jmpz t%d, %s%d", e->r0, (in_block ? "B" : "L"), e->r1);
+    else
+    {
+        printf("t%d = ", e->r0);
+        if (e->op == OP_MOV)
+            printf("%s%d", e->r1_imm ? "" : "t", e->r1);
+        else
+        {
+            printf("%s%d %s %s%d", e->r1_imm ? "" : "t", e->r1,
+                    get_ir_op_str(e->op), e->r2_imm ? "" : "t", e->r2);
+        }
+    }
+    printf("\n");
+}
+
 void print_ir_code(IR_Code *c)
 {
     printf("count: %d\n", c->instruction_count);
@@ -276,31 +296,17 @@ void print_ir_code(IR_Code *c)
         for (int j = 0; j < c->label_count; j++)
         {
             if (c->labels[j] == i)
-                printf("L%d:\n", j);
+                printf("\tL%d:\n", j);
         }
 
-        if (e->op == OP_JMP)
-            printf("jmp L%d", e->r0);
-        else if (e->op == OP_JMPZ)
-            printf("jmpz t%d, L%d", e->r0, e->r1);
-        else
-        {
-            printf("t%d = ", e->r0);
-            if (e->op == OP_MOV)
-                printf("%s%d", e->r1_imm ? "" : "t", e->r1);
-            else
-            {
-                printf("%s%d %s %s%d", e->r1_imm ? "" : "t", e->r1,
-                        get_ir_op_str(e->op), e->r2_imm ? "" : "t", e->r2);
-            }
-        }
-        printf("\n");
+        printf("%-8d", i);
+        print_instruction(e, 0);
     }
 
     for (int j = 0; j < c->label_count; j++)
     {
         if (c->labels[j] == c->instruction_count)
-            printf("L%d:\n", j);
+            printf("\tL%d:\n", j);
         assert(c->labels[j] <= c->instruction_count);
     }
     
@@ -309,6 +315,105 @@ void print_ir_code(IR_Code *c)
         printf("%s -> t%d\n", c->vars_reg[i].name, c->vars_reg[i].reg);
 }
 
-void gen_basic_blocks()
+Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
 {
+    Control_Flow_Graph *g = calloc(1, sizeof(*g));
+
+    IR_Basic_Block *curr_block = &g->blocks[g->block_count++];
+
+    int label_to_block_index[256];
+    memset(label_to_block_index, -1, sizeof(label_to_block_index));
+
+    for (int i = 0; i < c->instruction_count; i++)
+    {
+        int label_here = 0;
+
+        for (int j = 0; j < c->label_count; j++)
+        {
+            if (c->labels[j] == i)
+            {
+                label_to_block_index[j] = (i ? g->block_count : 0);
+                label_here = 1;
+            }
+        }
+
+        if (i && (label_here || c->instructions[i - 1].op == OP_JMP ||
+            c->instructions[i - 1].op == OP_JMPZ))
+        {
+            curr_block = &g->blocks[g->block_count];
+            curr_block->index = g->block_count;
+            curr_block->first_instruction = i;
+            g->block_count++;
+        }
+
+        IR_Instruction *e = &curr_block->instructions[curr_block->instruction_count];
+        *e = c->instructions[i];
+
+        curr_block->instruction_count++;
+    }
+    
+    // should we increment block_count here or not?
+    // because this is more like a virtual block in the end of function
+    g->blocks[g->block_count].index = g->block_count;
+
+    for (int j = 0; j < c->label_count; j++)
+    {
+        if (c->labels[j] == c->instruction_count)
+            label_to_block_index[j] = g->block_count;
+    }
+
+    for (int i = 0; i < g->block_count; i++)
+    {
+        IR_Basic_Block *block = &g->blocks[i];
+
+        // change jumps to point to block indices instead of labels
+        for (int j = 0; j < block->instruction_count; j++)
+        {
+            if (block->instructions[j].op == OP_JMP)
+                block->instructions[j].r0 = label_to_block_index[block->instructions[j].r0];
+            if (block->instructions[j].op == OP_JMPZ)
+                block->instructions[j].r1 = label_to_block_index[block->instructions[j].r1];
+        }
+
+#if 1
+        IR_Instruction *last_inst = &block->instructions[block->instruction_count - 1];
+
+        if (last_inst->op == OP_JMP)
+        {
+            block->childs[block->child_count++] = &g->blocks[last_inst->r0];
+        }
+        else if (last_inst->op == OP_JMPZ)
+        {
+            if (last_inst->op == OP_JMPZ)
+                block->childs[block->child_count++] = &g->blocks[i + 1];
+            block->childs[block->child_count++] = &g->blocks[last_inst->r1];
+        }
+        else
+            block->childs[block->child_count++] = &g->blocks[i + 1];
+#endif
+    }
+
+    for (int i = 0; i < g->block_count; i++)
+    {
+        IR_Basic_Block *block = &g->blocks[i];
+
+        printf("block %d (%d instructions, childs: [", i, block->instruction_count);
+        for (int j = 0; j < block->child_count; j++)
+        {
+            printf("%d", block->childs[j]->index);
+            if (j + 1 < block->child_count)
+                printf(", ");
+        }
+        printf("]):\n");
+
+        for (int j = 0; j < block->instruction_count; j++)
+        {
+            IR_Instruction *e = &block->instructions[j];
+
+            printf("\t\t");
+            print_instruction(e, 1);
+        }
+    }
+
+    return g;
 }

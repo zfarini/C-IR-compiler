@@ -134,6 +134,26 @@ typedef struct
     }               vars_reg[256];
 } IR_Code;
 
+typedef struct IR_Basic_Block IR_Basic_Block;
+
+struct IR_Basic_Block
+{
+    IR_Instruction  instructions[512];
+    int             instruction_count;
+    int             first_instruction;
+    IR_Basic_Block  *childs[2];
+    int             child_count;
+    int             index;
+};
+
+typedef struct
+{
+    IR_Basic_Block  blocks[32];
+    int             block_count;
+    int             labels[256];
+    int             label_count;
+} Control_Flow_Graph;
+
 void error_token(Token *token, char *fmt, ...);
 
 #endif

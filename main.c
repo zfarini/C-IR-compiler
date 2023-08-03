@@ -61,4 +61,5 @@ int main()
     print_ir_code(c);
     sim_ir_code(c);
 
+    gen_control_flow_graph(c);
 }
