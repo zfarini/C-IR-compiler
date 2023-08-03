@@ -127,7 +127,8 @@ int gen_ir(IR_Code *c, Node *node)
         reg = c->curr_reg;
         c->curr_reg++;
     } 
-    else if (node->type == NODE_WHILE || node->type == NODE_IF)
+#if 0
+    else if (node->type == NODE_WHILE)
     {
         int enter_label = c->label_count;
         int exit_label = c->label_count + 1;
@@ -163,6 +164,39 @@ int gen_ir(IR_Code *c, Node *node)
         }
 
         c->labels[exit_label] = c->instruction_count;
+    }
+#endif
+    else if (node->type == NODE_WHILE || node->type == NODE_IF)
+    {
+        int start_label = c->label_count;
+        if (node->type == NODE_WHILE)
+            c->labels[c->label_count++] = c->instruction_count;
+
+        int r0 = gen_ir(c, node->left);
+
+        IR_Instruction *e = add_instruction(c, OP_JMPZ);
+        e->r0 = r0;
+        
+        gen_ir(c, node->right);
+
+        IR_Instruction *f = 0;
+        int exit_label, else_label;
+        if (node->else_node)
+        {
+            f = add_instruction(c, OP_JMP);
+            else_label = c->label_count++;
+            c->labels[else_label] = c->instruction_count;
+            gen_ir(c, node->else_node);
+        }
+        else if (node->type == NODE_WHILE)
+            add_instruction(c, OP_JMP)->r0 = start_label;
+
+        exit_label = c->label_count++;
+        c->labels[exit_label] = c->instruction_count;
+
+        e->r1 = (node->else_node ? else_label : exit_label);
+        if (f)
+            f->r0 = exit_label;
     }
     else if (node->type == NODE_BLOCK)
     {
@@ -299,7 +333,7 @@ void print_ir_code(IR_Code *c)
                 printf("\tL%d:\n", j);
         }
 
-        printf("%-8d", i);
+        printf("%-16d", i);
         print_instruction(e, 0);
     }
 
@@ -313,6 +347,266 @@ void print_ir_code(IR_Code *c)
     printf("variables:\n");
     for (int i = 0; c->vars_reg[i].name; i++)
         printf("%s -> t%d\n", c->vars_reg[i].name, c->vars_reg[i].reg);
+}
+
+enum 
+{
+    VALUE_VALUE,
+    VALUE_CONST,
+    VALUE_REGISTER,
+    VALUE_OP,
+};
+typedef struct 
+{
+    int type;      
+    int op;
+    int v1;
+    int v2;
+    int v1_type;
+    int v2_type;
+} Value;
+
+int find_value(Value *values, int value_count, Value *to_find)
+{
+    for (int i = 0; i < value_count; i++)
+        if (!memcmp(&values[i], to_find, sizeof(*to_find)))
+            return i;
+
+    return value_count;
+}
+
+void local_value_numbering_for_basic_block(IR_Basic_Block *b)
+{
+
+    Value   values[1024];
+    int     value_count = 0; 
+    
+    int register_value[256];
+    memset(register_value, -1, sizeof(register_value));
+
+    for (int i = 0; i < b->instruction_count; i++)
+    {
+        IR_Instruction *e = &b->instructions[i];
+
+        if (e->op == OP_MOV)
+        {
+            Value v = {0};
+            v.type = (e->r1_imm ? VALUE_CONST : VALUE_REGISTER);
+            v.v1 = e->r1;
+            
+            int j = find_value(values, value_count, &v);
+
+            if (!e->r1_imm && register_value[e->r1] != -1)
+                j = register_value[e->r1];
+            else if (j == value_count)
+                values[value_count++] = v;
+
+            register_value[e->r0] = j;
+
+            if (values[j].type == VALUE_CONST)
+            {
+                e->r1 = values[j].v1;
+                e->r1_imm = 1;
+            }
+            else if (values[j].type == VALUE_REGISTER)
+            {
+                e->r1 = values[j].v1;
+                assert(!e->r1_imm);
+            }
+        }
+        else if (e->op < OP_BINARY)
+        {
+            Value v = {0};
+            v.type = VALUE_OP;
+            v.op = e->op;
+            {
+                Value v2 = {0};
+                v2.type = (e->r1_imm ? VALUE_CONST : VALUE_REGISTER);
+                v2.v1 = e->r1;
+
+                int j = find_value(values, value_count, &v2);
+
+                if (!e->r1_imm && register_value[e->r1] != -1)
+                    j = register_value[e->r1];
+                if (j < value_count)
+                {
+                    v.v1_type = VALUE_VALUE;
+                    v.v1 = j;
+                }
+                else
+                {
+                    v.v1_type = v2.type;
+                    v.v1 = e->r1;
+                }
+            }
+            {
+                Value v2 = {0};
+                v2.type = (e->r2_imm ? VALUE_CONST : VALUE_REGISTER);
+                v2.v1 = e->r2;
+
+                int j = find_value(values, value_count, &v2);
+
+                if (!e->r2_imm && register_value[e->r2] != -1)
+                    j = register_value[e->r2];
+                if (j < value_count)
+                {
+                    v.v2_type = VALUE_VALUE;
+                    v.v2 = j;
+                }
+                else
+                {
+                    v.v2_type = v2.type;
+                    v.v2 = e->r2;
+                }
+            }
+    //        if (v.v1_type == VALUE_CONST && v.v2_type == VALUE_CONST)
+            int j = find_value(values, value_count, &v);
+
+            if (j == value_count)
+                values[value_count++] = v;
+            else
+            {
+                for (int k = 0; k < array_length(register_value); k++)
+                {
+                    if (register_value[k] == j)
+                    {
+                        e->op = OP_MOV;
+                        e->r1_imm = 0;
+                        e->r1 = k;
+                        break ;
+                    }
+                }
+            }
+            if (e->op < OP_BINARY)
+            {
+                if (v.v1_type == VALUE_VALUE)
+                {
+                    if (values[v.v1].type == VALUE_CONST || 
+                        values[v.v1].type == VALUE_REGISTER)
+                    {
+                        e->r1_imm = (values[v.v1].type == VALUE_CONST);
+                        e->r1 = values[v.v1].v1;
+                    }
+                    else
+                    {
+                        for (int k = 0; k < array_length(register_value); k++)
+                        {
+                            if (register_value[k] == v.v1)
+                            {
+                                e->r1 = k;
+                                e->r1_imm = 0;
+                                break ;
+                            }
+                        }
+                    }
+                }
+                if (v.v2_type == VALUE_VALUE)
+                {
+                    if (values[v.v2].type == VALUE_CONST || 
+                        values[v.v2].type == VALUE_REGISTER)
+                    {
+                        e->r2_imm = (values[v.v2].type == VALUE_CONST);
+                        e->r2 = values[v.v2].v1;
+                    }
+                    else
+                    {
+                        for (int k = 0; k < array_length(register_value); k++)
+                        {
+                            if (register_value[k] == v.v2)
+                            {
+                                e->r2 = k;
+                                e->r2_imm = 0;
+                                break ;
+                            }
+                        }
+                    }
+                }
+            }
+            register_value[e->r0] = j;
+        }
+    }
+    printf("values:\n");
+    for (int j = 0; j < value_count; j++)
+    {
+        printf("#%d: ", j);
+        if (values[j].type == VALUE_CONST)
+            printf("const(%d)", values[j].v1);
+        else if (values[j].type == VALUE_REGISTER)
+            printf("t%d", values[j].v1);
+        else if (values[j].type == VALUE_OP)
+        {
+            if (values[j].v1_type == VALUE_VALUE)
+                printf("#%d", values[j].v1);
+            else if (values[j].v1_type == VALUE_CONST)
+                printf("const(%d)", values[j].v1);
+            else if (values[j].v1_type == VALUE_REGISTER)
+                printf("t%d", values[j].v1);
+            else
+                assert(0);
+                
+            printf(" %s ", get_ir_op_str(values[j].op));
+
+            if (values[j].v2_type == VALUE_VALUE)
+                printf("#%d", values[j].v2);
+            else if (values[j].v2_type == VALUE_CONST)
+                printf("const(%d)", values[j].v2);
+            else if (values[j].v2_type == VALUE_REGISTER)
+                printf("t%d", values[j].v2);
+            else
+                assert(0);
+
+        }
+        else
+            assert(0);
+        printf("\n");
+    }
+#if 0
+#if 1
+    int register_use_count[256] = {0};
+    for (int i = b->instruction_count - 1; i >= 0; i--)
+    {
+        IR_Instruction *e = &b->instructions[i];
+
+        if ((e->op == OP_MOV || e->op < OP_BINARY) && !register_use_count[e->r0] && i != b->instruction_count - 1)
+        {
+            for (int j = i + 1; j < b->instruction_count; j++)
+                b->instructions[j - 1] = b->instructions[j];
+            b->instruction_count--;
+        }
+        else
+        {
+            if (e->op == OP_MOV && !e->r1_imm)
+                register_use_count[e->r1]++;
+            else if (e->op < OP_BINARY)
+            {
+                if (!e->r1_imm) register_use_count[e->r1]++;
+                if (!e->r2_imm) register_use_count[e->r2]++;
+            }
+        }
+    }
+#else
+    while (1)
+    {
+        int prev_inst_count = b->instruction_count;
+        
+        int register_used[256] = {0};
+        for (int i = 0; i < b->instruction_count; i++)
+        {
+            IR_Instruction *e = &b->instructions[i];
+            if (e->op == OP_MOV && !e->r1_imm)
+                register_used[e->r1] = 1;
+            else if (e->op < OP_BINARY)
+            {
+                if (!e->r1_imm) register_used[e->r1] = 1;
+                if (!e->r2_imm) register_used[e->r2] = 1;
+            }
+        }
+        
+        if (b->instruction_count == prev_inst_count)
+            break ;
+    }
+#endif
+#endif
 }
 
 Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
@@ -415,5 +709,30 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
         }
     }
 
+    printf("\033[1;33moptimized:\033[0m\n\n");
+
+    for (int i = 0; i < g->block_count; i++)
+    {
+        IR_Basic_Block *block = &g->blocks[i];
+
+        local_value_numbering_for_basic_block(block);
+
+        printf("optimized block %d (%d instructions, childs: [", i, block->instruction_count);
+        for (int j = 0; j < block->child_count; j++)
+        {
+            printf("%d", block->childs[j]->index);
+            if (j + 1 < block->child_count)
+                printf(", ");
+        }
+        printf("]):\n");
+
+        for (int j = 0; j < block->instruction_count; j++)
+        {
+            IR_Instruction *e = &block->instructions[j];
+
+            printf("\t\t");
+            print_instruction(e, 1);
+        }
+    }
     return g;
 }
