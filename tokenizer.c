@@ -3,7 +3,25 @@
 /*
     we propably need to deal with '\r' ?
     DON'T try to optimize / simply code until we write the preprocessor
+
+    we can get away with generating a token on demand from parser
+    instead of generate all at once but do we really care?
 */
+
+void error_token(Token *token, char *fmt, ...)
+{
+    fprintf(stderr, "\033[1;37m%d:%d: \033[1;31merror: \033[1;37m",
+            token->line, token->col);
+    
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+
+    fprintf(stderr, "\033[0m\n");
+    exit(1);
+}
+
 Token *tokenize(char *s)
 {
     struct

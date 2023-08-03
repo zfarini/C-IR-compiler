@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <stdarg.h>
 
 #define array_length(arr) ((int)(sizeof(arr) / sizeof(*arr)))
 #define global static
@@ -118,6 +119,20 @@ typedef struct
     int r1_imm;
     int r2_imm;
 } IR_Instruction;
+
+typedef struct
+{
+    IR_Instruction  instructions[4096];
+    int             instruction_count;
+    int             curr_reg;
+    int             labels[256];
+    int             label_count;
+    struct
+    {
+        char *name;
+        int reg;
+    }               vars_reg[256];
+} IR_Code;
 
 void error_token(Token *token, char *fmt, ...);
 

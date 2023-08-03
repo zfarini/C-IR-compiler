@@ -1,19 +1,4 @@
 #include "compiler.h"
-#include <stdarg.h>
-
-void error_token(Token *token, char *fmt, ...)
-{
-    fprintf(stderr, "\033[1;37m%d:%d: \033[1;31merror: \033[1;37m",
-            token->line, token->col);
-    
-    va_list ap;
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-
-    fprintf(stderr, "\033[0m\n");
-    exit(1);
-}
 
 Node *make_node(Parser *p, int type)
 {

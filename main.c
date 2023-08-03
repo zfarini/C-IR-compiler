@@ -55,28 +55,10 @@ int main()
 #endif
 
     Node *node = parse(tokens);
-    while (node)
-    {
-        gen_ir(node);
-        node = node->next_expr;
-    }
 
-    printf("variables:\n");
-    for (int i = 0; vars_reg[i].name; i++)
-        printf("%s -> t%d\n", vars_reg[i].name, vars_reg[i].reg);
+    IR_Code *c = gen_ir_code(node);
 
-    printf("IR:\n");
-    print_ir();
-
-    pthread_t thread;
-    pthread_create(&thread, 0, sim_ir, 0);
-    pthread_join(thread, 0);
-
-    optimize_ir();
-    printf("Optimized:\n");
-    print_ir();
-
-    pthread_create(&thread, 0, sim_ir, 0);
-    pthread_join(thread, 0);
+    print_ir_code(c);
+    sim_ir_code(c);
 
 }
