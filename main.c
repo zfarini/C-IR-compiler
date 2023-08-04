@@ -40,6 +40,21 @@ char *load_entire_file(char *filename)
 
 #define STRINGIFY(x) #x
 
+IR_Code *cfg_to_ir_code(Control_Flow_Graph *g)
+{
+    IR_Code *c = calloc(1, sizeof(*c));
+
+    for (int i = 0; i < g->block_count; i++)
+    {
+        c->labels[c->label_count++] = c->instruction_count;
+        for (int j = 0; j < g->blocks[i].instruction_count; j++)
+            c->instructions[c->instruction_count++] = g->blocks[i].instructions[j];
+    }
+    c->labels[c->label_count++] = c->instruction_count;
+
+    return c;
+}
+
 int main(void)
 {
     char *s = load_entire_file("/Users/zakariafarini/Desktop/Compiler/Compiler/code.txt");
@@ -60,8 +75,12 @@ int main(void)
 
     IR_Code *c = gen_ir_code(node);
 
- //   print_ir_code(c);
+    print_ir_code(c);
     sim_ir_code(c);
 
-    gen_control_flow_graph(c);
+    Control_Flow_Graph *g = gen_control_flow_graph(c);
+
+    IR_Code *final = cfg_to_ir_code(g);
+    print_ir_code(final);
+    sim_ir_code(final);
 }

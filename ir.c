@@ -182,7 +182,7 @@ int gen_ir(IR_Code *c, Node *node)
         int r0 = gen_ir(c, node->left);
 
         IR_Instruction *e = add_instruction(c, OP_JMPZ);
-        e->r0 = r0;
+        e->r1 = r0;
         
         gen_ir(c, node->right);
 
@@ -201,7 +201,7 @@ int gen_ir(IR_Code *c, Node *node)
         exit_label = c->label_count++;
         c->labels[exit_label] = c->instruction_count;
 
-        e->r1 = (node->else_node ? else_label : exit_label);
+        e->r0 = (node->else_node ? else_label : exit_label);
         if (f)
             f->r0 = exit_label;
     }
@@ -285,9 +285,9 @@ void sim_ir_code(IR_Code *c)
         }
         else if (e->op == OP_JMPZ)
         {
-            if (!regs[e->r0])
+            if (!regs[e->r1])
             {
-                ip = c->labels[e->r1];
+                ip = c->labels[e->r0];
                 continue ;
             }
         }
@@ -311,7 +311,7 @@ void print_instruction(IR_Instruction *e, int in_block)
     if (e->op == OP_JMP)
         printf("jmp %s%d", (in_block ? "B" : "L"), e->r0);
     else if (e->op == OP_JMPZ)
-        printf("jmpz t%d, %s%d", e->r0, (in_block ? "B" : "L"), e->r1);
+        printf("jmpz %s%d t%d", (in_block ? "B" : "L"), e->r0, e->r1);
     else if (e->op == OP_PRINT)
         printf("print %s%d", e->r1_imm ? "" : "t", e->r1);
     else
@@ -409,6 +409,13 @@ void assign_register_to_value(int *value_owner,
     register_value[reg] = i;
 }
 
+int is_binop_commutative(int op)
+{
+    assert(op < OP_BINARY);
+    return (op == '+' || op == '*' || op == OP_EQUAL ||
+            op == OP_NOT_EQUAL);
+}
+
 void local_value_numbering_for_basic_block(IR_Basic_Block *b)
 {
 
@@ -486,6 +493,14 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
             }
             v.v1 = register_value[e->r1];
             v.v2 = register_value[e->r2];
+
+            if (v.v1 > v.v2 && is_binop_commutative(e->op))
+            {
+                int temp = v.v1;
+                v.v1 = v.v2;
+                v.v2 = temp;
+            }
+
             int j = find_value(values, value_count, &v);
 
             if (j == value_count)
@@ -543,34 +558,7 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
         printf("\n");
     }
 #endif
-#if 1
-    int register_used[256] = {0};
-    for (int i = b->instruction_count - 1; i >= 0; i--)
-    {
-        IR_Instruction *e = &b->instructions[i];
 
-        if (((e->op == OP_MOV || e->op < OP_BINARY) && !register_used[e->r0])
-            || (e->op == OP_MOV && !e->r1_imm && e->r1 == e->r0))
-        {
-            for (int j = i + 1; j < b->instruction_count; j++)
-                b->instructions[j - 1] = b->instructions[j];
-            b->instruction_count--;
-        }
-        else
-        {
-
-             if (!e->r1_imm && (e->op == OP_MOV || 
-                 e->op == OP_PRINT || e->op == OP_JMPZ || e->op < OP_BINARY))
-                 register_used[e->r1] = 1;
-             if (e->op < OP_BINARY && !e->r2_imm)
-                 register_used[e->r2] = 1;
-        }
-
-
-        //if (e->op == OP_MOV || e->op < OP_BINARY)
-          //  register_used[e->r0] = 0;
-    }
-#endif
 }
 
 Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
@@ -627,10 +615,8 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
         // change jumps to point to block indices instead of labels
         for (int j = 0; j < block->instruction_count; j++)
         {
-            if (block->instructions[j].op == OP_JMP)
+            if (block->instructions[j].op == OP_JMP || block->instructions[j].op == OP_JMPZ)
                 block->instructions[j].r0 = label_to_block_index[block->instructions[j].r0];
-            if (block->instructions[j].op == OP_JMPZ)
-                block->instructions[j].r1 = label_to_block_index[block->instructions[j].r1];
         }
 
 #if 1
@@ -700,6 +686,71 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
             print_instruction(e, 1);
         }
     }
+#if 1
+    while (1)
+    {
+
+        int register_used[256] = {0};
+        for (int i = 0; i < g->block_count; i++)
+        {
+            for (int j = 0; j < g->blocks[i].instruction_count; j++)
+            {
+                IR_Instruction *e = &g->blocks[i].instructions[j];
+
+                 if (!e->r1_imm && (e->op == OP_MOV || 
+                     e->op == OP_PRINT || e->op == OP_JMPZ || e->op < OP_BINARY))
+                     register_used[e->r1]++;
+                 if (e->op < OP_BINARY && !e->r2_imm)
+                     register_used[e->r2]++;
+            }
+        }
+
+        int end = 1;
+
+        for (int i = 0; i < g->block_count; i++)
+        {
+            for (int j = 0; j < g->blocks[i].instruction_count; j++)
+            {
+                IR_Instruction *e = &g->blocks[i].instructions[j];
+
+                int remove = 0;
+                // this is a block optimization for now, I'm not sure if can extended it to global
+                // it happens when a register is used once to store an op and then moved to another
+                // one
+                if ((e->op == OP_MOV || e->op < OP_BINARY) && register_used[e->r0] == 1)
+                {
+                    for (int k = j + 1; k < g->blocks[i].instruction_count; k++)
+                    {
+                        IR_Instruction *f = &g->blocks[i].instructions[k];
+
+                        if (f->op == OP_MOV && !f->r1_imm && f->r1 == e->r0)
+                        {
+                            int r = f->r0;
+
+                            *f = *e;
+                            f->r0 = r;
+                            remove = 1;
+                        }
+                            
+                    }
+                }
+                if (remove || (((e->op == OP_MOV || e->op < OP_BINARY) && !register_used[e->r0])
+                    || (e->op == OP_MOV && !e->r1_imm && e->r0 == e->r1)))
+                {
+                    for (int k = j + 1; k < g->blocks[i].instruction_count; k++)
+                        g->blocks[i].instructions[k - 1] = g->blocks[i].instructions[k];
+                    g->blocks[i].instruction_count--;
+                    end = 0;
+                }
+
+            }
+        }
+        if (end)
+            break ;
+    }
 #endif
+#endif
+
+
     return g;
 }

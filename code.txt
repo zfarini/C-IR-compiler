@@ -1,6 +1,15 @@
-a = 42 + 3 * 27 - 16
-b = a * a + 3 * a / a + (a == 42) - (a > 32)
-c = b + a * b - (b != a) * 42 + b * b
-print a
-print b
+a = 0
+b = 1
+c = a + b
+i = 0
+n = 20
+while (i < n)
+{
+    c = a + b
+    a = b
+    b = c
+    i = i + 1
+}
+
 print c
+
