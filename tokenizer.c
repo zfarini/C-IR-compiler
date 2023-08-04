@@ -8,6 +8,8 @@
     instead of generate all at once but do we really care?
 */
 
+char *find_char_in_str(char *s, char c);
+
 void error_token(Token *token, char *fmt, ...)
 {
     fprintf(stderr, "\033[1;37m%d:%d: \033[1;31merror: \033[1;37m",
@@ -50,7 +52,7 @@ Token *tokenize(char *s)
         {"||",      TOKEN_LOGICAL_OR},
     };
 
-    int max_token_count = strlen(s) + 1;
+    int max_token_count = (int)strlen(s) + 1;
     Token   *tokens = calloc(sizeof(Token), max_token_count);
 
     int     i = 0;
@@ -112,7 +114,7 @@ Token *tokenize(char *s)
             // @Speed
             for (int j = 0; j < array_length(multi_char_tokens); j++)
             {
-                int len = strlen(multi_char_tokens[j].name);
+                int len = (int)strlen(multi_char_tokens[j].name);
                 if (!strncmp(s + i, multi_char_tokens[j].name, len))
                 {
                     token->type = multi_char_tokens[j].type;
@@ -129,7 +131,7 @@ Token *tokenize(char *s)
                     i++;
                 }
                 else
-                    error_token(token, "unkown token '%c' (ascii %d)", s[i], s[i]); 
+                    error_token(token, "unkown token '%c' (ascii %d)", s[i], s[i]);
             }
         }
 

@@ -115,6 +115,14 @@ Node *parse_statement(Parser *p)
         }
         skip_token(p);
     }
+    else if (get_curr_token(p)->type == TOKEN_IDENTIFIER &&
+             !strcmp(get_curr_token(p)->name, "print"))
+    {
+        node = make_node(p, NODE_PRINT);
+        skip_token(p);
+
+        node->left = parse_expr(p, 0);
+    }
     else
     {
         node = parse_expr(p, 0);
@@ -173,6 +181,8 @@ Node *parse_atom(Parser *p)
         error_token(get_curr_token(p), "expected an expression");
     return (res);
 }
+
+char *find_char_in_str(char *s, char c);
 
 int is_bin_op(int type)
 {

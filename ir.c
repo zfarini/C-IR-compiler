@@ -18,7 +18,7 @@ char *get_ir_op_str(int type)
         s[type][0] = type;
         return s[type];
     }
-    else 
+    else
     {
         for (int i = 0; i < array_length(op_str); i++)
             if (op_str[i].type == type)
@@ -105,6 +105,13 @@ int gen_ir(IR_Code *c, Node *node)
     {
  //       IR_Instruction *e = add_instruction(OP_JMP);
     }
+    else if (node->type == NODE_PRINT)
+    {
+        int r = gen_ir(c, node->left);
+
+        IR_Instruction *e = add_instruction(c, OP_PRINT);
+        e->r1 = r;
+    }
     else if (node->type == NODE_BINOP && node->op == '=')
     {
         int r1 = gen_ir(c, node->right);
@@ -126,7 +133,7 @@ int gen_ir(IR_Code *c, Node *node)
 
         reg = c->curr_reg;
         c->curr_reg++;
-    } 
+    }
 #if 0
     else if (node->type == NODE_WHILE)
     {
@@ -180,7 +187,7 @@ int gen_ir(IR_Code *c, Node *node)
         gen_ir(c, node->right);
 
         IR_Instruction *f = 0;
-        int exit_label, else_label;
+        int exit_label, else_label = -1;
         if (node->else_node)
         {
             f = add_instruction(c, OP_JMP);
@@ -237,9 +244,9 @@ int eval_op(int op, int r1, int r2)
     else if (op == OP_MUL)
         res = r1 * r2;
     else if (op == OP_DIV)
-        res = r1 / r2;
+        res = (r2 == 0 ? 1 : r1 / r2);
     else if (op == OP_MOD)
-        res = r1 % r2;
+        res = (r2 == 0 ? 1 : r1 % r2);
     else if (op == OP_LESS)
         res = r1 < r2;
     else if (op == OP_GREATER)
@@ -262,6 +269,8 @@ void sim_ir_code(IR_Code *c)
     int regs[128] = {};
     int ip = 0;
 
+    fflush(stderr); // ??
+    printf("\033[1;32msim output:\033[0m\n");
     while (ip < c->instruction_count)
     {
         IR_Instruction *e = &c->instructions[ip];
@@ -282,6 +291,10 @@ void sim_ir_code(IR_Code *c)
                 continue ;
             }
         }
+        else if (e->op == OP_PRINT)
+        {
+            printf("%d\n", r1_value);
+        }
         else if (e->op < OP_BINARY)
             regs[e->r0] = eval_op(e->op, r1_value, r2_value);
         else if (e->op == OP_MOV)
@@ -291,12 +304,6 @@ void sim_ir_code(IR_Code *c)
 
         ip++;
     }
-
-    printf("sim result:\n");
-    for (int i = 0; c->vars_reg[i].name; i++)
-    {
-        printf("%s -> %d\n", c->vars_reg[i].name, regs[c->vars_reg[i].reg]);
-    }
 }
 
 void print_instruction(IR_Instruction *e, int in_block)
@@ -305,6 +312,8 @@ void print_instruction(IR_Instruction *e, int in_block)
         printf("jmp %s%d", (in_block ? "B" : "L"), e->r0);
     else if (e->op == OP_JMPZ)
         printf("jmpz t%d, %s%d", e->r0, (in_block ? "B" : "L"), e->r1);
+    else if (e->op == OP_PRINT)
+        printf("print %s%d", e->r1_imm ? "" : "t", e->r1);
     else
     {
         printf("t%d = ", e->r0);
@@ -321,6 +330,7 @@ void print_instruction(IR_Instruction *e, int in_block)
 
 void print_ir_code(IR_Code *c)
 {
+    printf("\033[1;32mgenerated ir:\033[0m\n");
     printf("count: %d\n", c->instruction_count);
 
     for (int i = 0; i < c->instruction_count; i++)
@@ -344,26 +354,24 @@ void print_ir_code(IR_Code *c)
         assert(c->labels[j] <= c->instruction_count);
     }
     
-    printf("variables:\n");
-    for (int i = 0; c->vars_reg[i].name; i++)
-        printf("%s -> t%d\n", c->vars_reg[i].name, c->vars_reg[i].reg);
+    //printf("variables:\n");
+    //for (int i = 0; c->vars_reg[i].name; i++)
+    //    printf("%s -> t%d\n", c->vars_reg[i].name, c->vars_reg[i].reg);
 }
 
-enum 
+enum
 {
     VALUE_VALUE,
     VALUE_CONST,
     VALUE_REGISTER,
     VALUE_OP,
 };
-typedef struct 
+typedef struct
 {
-    int type;      
+    int type;
     int op;
     int v1;
     int v2;
-    int v1_type;
-    int v2_type;
 } Value;
 
 int find_value(Value *values, int value_count, Value *to_find)
@@ -375,11 +383,39 @@ int find_value(Value *values, int value_count, Value *to_find)
     return value_count;
 }
 
+void assign_register_to_value(int *value_owner, 
+                                int *register_value, int value_count, int reg, int i)
+{
+    assert(i < value_count); 
+
+    for (int j = 0; j < value_count; j++)
+    {
+        if (value_owner[j] == reg)
+        {
+            value_owner[j] = -1;
+            for (int k = 0; k < 256; k++)
+            {
+                if (k != reg && register_value[k] == j)
+                {
+                    value_owner[j] = k;
+                    break ;
+                }
+            }
+        }
+    }
+
+    if (value_owner[i] == -1)
+        value_owner[i] = reg;
+    register_value[reg] = i;
+}
+
 void local_value_numbering_for_basic_block(IR_Basic_Block *b)
 {
 
     Value   values[1024];
-    int     value_count = 0; 
+    int     value_count = 0;
+    int     value_owner[1024];
+    memset(value_owner, -1, sizeof(value_owner));
     
     int register_value[256];
     memset(register_value, -1, sizeof(register_value));
@@ -388,7 +424,7 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
     {
         IR_Instruction *e = &b->instructions[i];
 
-        if (e->op == OP_MOV)
+        if (e->op == OP_MOV || e->op == OP_PRINT)
         {
             Value v = {0};
             v.type = (e->r1_imm ? VALUE_CONST : VALUE_REGISTER);
@@ -396,178 +432,125 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
             
             int j = find_value(values, value_count, &v);
 
-            if (!e->r1_imm && register_value[e->r1] != -1)
+            if (!e->r1_imm && register_value[e->r1] == -1)
+            {
+                assert(j == value_count);
+                register_value[e->r1] = value_count;
+                values[value_count].type = VALUE_REGISTER;
+                values[value_count].v1 = e->r1;
+                value_owner[value_count] = e->r1;
+                value_count++;
+            }
+            if (!e->r1_imm)
                 j = register_value[e->r1];
             else if (j == value_count)
                 values[value_count++] = v;
 
-            register_value[e->r0] = j;
+            if (!e->r1_imm)
+                assert(value_owner[j] != -1);
+
+            if (e->op != OP_PRINT)
+                assign_register_to_value(value_owner, register_value, value_count, e->r0, j);
 
             if (values[j].type == VALUE_CONST)
             {
                 e->r1 = values[j].v1;
                 e->r1_imm = 1;
             }
-            else if (values[j].type == VALUE_REGISTER)
-            {
-                e->r1 = values[j].v1;
-                assert(!e->r1_imm);
-            }
+            else
+                e->r1 = value_owner[j];
         }
         else if (e->op < OP_BINARY)
         {
             Value v = {0};
             v.type = VALUE_OP;
             v.op = e->op;
+
+            assert(!e->r1_imm && !e->r2_imm);
+
+            if (register_value[e->r1] == -1)
             {
-                Value v2 = {0};
-                v2.type = (e->r1_imm ? VALUE_CONST : VALUE_REGISTER);
-                v2.v1 = e->r1;
-
-                int j = find_value(values, value_count, &v2);
-
-                if (!e->r1_imm && register_value[e->r1] != -1)
-                    j = register_value[e->r1];
-                if (j < value_count)
-                {
-                    v.v1_type = VALUE_VALUE;
-                    v.v1 = j;
-                }
-                else
-                {
-                    v.v1_type = v2.type;
-                    v.v1 = e->r1;
-                }
+                register_value[e->r1] = value_count;
+                values[value_count].type = VALUE_REGISTER;
+                values[value_count].v1 = e->r1;
+                value_owner[value_count] = e->r1;
+                value_count++;
             }
+            if (register_value[e->r2] == -1)
             {
-                Value v2 = {0};
-                v2.type = (e->r2_imm ? VALUE_CONST : VALUE_REGISTER);
-                v2.v1 = e->r2;
-
-                int j = find_value(values, value_count, &v2);
-
-                if (!e->r2_imm && register_value[e->r2] != -1)
-                    j = register_value[e->r2];
-                if (j < value_count)
-                {
-                    v.v2_type = VALUE_VALUE;
-                    v.v2 = j;
-                }
-                else
-                {
-                    v.v2_type = v2.type;
-                    v.v2 = e->r2;
-                }
+                register_value[e->r2] = value_count;
+                values[value_count].type = VALUE_REGISTER;
+                values[value_count].v1 = e->r2;
+                value_owner[value_count] = e->r2;
+                value_count++;
             }
-    //        if (v.v1_type == VALUE_CONST && v.v2_type == VALUE_CONST)
+            v.v1 = register_value[e->r1];
+            v.v2 = register_value[e->r2];
             int j = find_value(values, value_count, &v);
 
             if (j == value_count)
                 values[value_count++] = v;
+
+            if (value_owner[j] != -1)
+            {
+                e->op = OP_MOV;
+                e->r1 = value_owner[j];
+            }
             else
             {
-                for (int k = 0; k < array_length(register_value); k++)
+                if (values[register_value[e->r1]].type == VALUE_CONST)
+                    e->r1_imm = 1, e->r1 = values[register_value[e->r1]].v1;
+                else
+                    e->r1 = value_owner[register_value[e->r1]];
+
+                if (values[register_value[e->r2]].type == VALUE_CONST)
+                    e->r2_imm = 1, e->r2 = values[register_value[e->r2]].v1;
+                else
+                    e->r2 = value_owner[register_value[e->r2]];
+
+                if (e->r1_imm && e->r2_imm)
                 {
-                    if (register_value[k] == j)
-                    {
-                        e->op = OP_MOV;
-                        e->r1_imm = 0;
-                        e->r1 = k;
-                        break ;
-                    }
+                    e->r1 = eval_op(e->op, e->r1, e->r2);
+                    e->op = OP_MOV;
+                    e->r1_imm = 1;
+                    Value v3 = {0};
+                    v3.type = VALUE_CONST;
+                    v3.v1 = e->r1;
+                    j = find_value(values, value_count, &v3);
+                    if (j == value_count)
+                        values[value_count++] = v3;
                 }
             }
-            if (e->op < OP_BINARY)
-            {
-                if (v.v1_type == VALUE_VALUE)
-                {
-                    if (values[v.v1].type == VALUE_CONST || 
-                        values[v.v1].type == VALUE_REGISTER)
-                    {
-                        e->r1_imm = (values[v.v1].type == VALUE_CONST);
-                        e->r1 = values[v.v1].v1;
-                    }
-                    else
-                    {
-                        for (int k = 0; k < array_length(register_value); k++)
-                        {
-                            if (register_value[k] == v.v1)
-                            {
-                                e->r1 = k;
-                                e->r1_imm = 0;
-                                break ;
-                            }
-                        }
-                    }
-                }
-                if (v.v2_type == VALUE_VALUE)
-                {
-                    if (values[v.v2].type == VALUE_CONST || 
-                        values[v.v2].type == VALUE_REGISTER)
-                    {
-                        e->r2_imm = (values[v.v2].type == VALUE_CONST);
-                        e->r2 = values[v.v2].v1;
-                    }
-                    else
-                    {
-                        for (int k = 0; k < array_length(register_value); k++)
-                        {
-                            if (register_value[k] == v.v2)
-                            {
-                                e->r2 = k;
-                                e->r2_imm = 0;
-                                break ;
-                            }
-                        }
-                    }
-                }
-            }
-            register_value[e->r0] = j;
+
+            assign_register_to_value(value_owner, register_value, value_count, e->r0, j);
         }
     }
+#if 0
     printf("values:\n");
     for (int j = 0; j < value_count; j++)
     {
-        printf("#%d: ", j);
-        if (values[j].type == VALUE_CONST)
-            printf("const(%d)", values[j].v1);
-        else if (values[j].type == VALUE_REGISTER)
-            printf("t%d", values[j].v1);
-        else if (values[j].type == VALUE_OP)
-        {
-            if (values[j].v1_type == VALUE_VALUE)
-                printf("#%d", values[j].v1);
-            else if (values[j].v1_type == VALUE_CONST)
-                printf("const(%d)", values[j].v1);
-            else if (values[j].v1_type == VALUE_REGISTER)
-                printf("t%d", values[j].v1);
-            else
-                assert(0);
-                
-            printf(" %s ", get_ir_op_str(values[j].op));
+        Value *v = &values[j];
 
-            if (values[j].v2_type == VALUE_VALUE)
-                printf("#%d", values[j].v2);
-            else if (values[j].v2_type == VALUE_CONST)
-                printf("const(%d)", values[j].v2);
-            else if (values[j].v2_type == VALUE_REGISTER)
-                printf("t%d", values[j].v2);
-            else
-                assert(0);
-
-        }
+        printf("\t#%d: ", j);
+        if (v->type == VALUE_CONST)
+            printf("const(%d)", v->v1);
+        else if (v->type == VALUE_REGISTER)
+            printf("t%d", v->v1);
+        else if (v->type == VALUE_OP)
+            printf("#%d %s #%d", v->v1, get_ir_op_str(v->op), v->v2);
         else
             assert(0);
         printf("\n");
     }
-#if 0
+#endif
 #if 1
-    int register_use_count[256] = {0};
+    int register_used[256] = {0};
     for (int i = b->instruction_count - 1; i >= 0; i--)
     {
         IR_Instruction *e = &b->instructions[i];
 
-        if ((e->op == OP_MOV || e->op < OP_BINARY) && !register_use_count[e->r0] && i != b->instruction_count - 1)
+        if (((e->op == OP_MOV || e->op < OP_BINARY) && !register_used[e->r0])
+            || (e->op == OP_MOV && !e->r1_imm && e->r1 == e->r0))
         {
             for (int j = i + 1; j < b->instruction_count; j++)
                 b->instructions[j - 1] = b->instructions[j];
@@ -575,37 +558,18 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
         }
         else
         {
-            if (e->op == OP_MOV && !e->r1_imm)
-                register_use_count[e->r1]++;
-            else if (e->op < OP_BINARY)
-            {
-                if (!e->r1_imm) register_use_count[e->r1]++;
-                if (!e->r2_imm) register_use_count[e->r2]++;
-            }
+
+             if (!e->r1_imm && (e->op == OP_MOV || 
+                 e->op == OP_PRINT || e->op == OP_JMPZ || e->op < OP_BINARY))
+                 register_used[e->r1] = 1;
+             if (e->op < OP_BINARY && !e->r2_imm)
+                 register_used[e->r2] = 1;
         }
+
+
+        //if (e->op == OP_MOV || e->op < OP_BINARY)
+          //  register_used[e->r0] = 0;
     }
-#else
-    while (1)
-    {
-        int prev_inst_count = b->instruction_count;
-        
-        int register_used[256] = {0};
-        for (int i = 0; i < b->instruction_count; i++)
-        {
-            IR_Instruction *e = &b->instructions[i];
-            if (e->op == OP_MOV && !e->r1_imm)
-                register_used[e->r1] = 1;
-            else if (e->op < OP_BINARY)
-            {
-                if (!e->r1_imm) register_used[e->r1] = 1;
-                if (!e->r2_imm) register_used[e->r2] = 1;
-            }
-        }
-        
-        if (b->instruction_count == prev_inst_count)
-            break ;
-    }
-#endif
 #endif
 }
 
@@ -687,6 +651,7 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
 #endif
     }
 
+    printf("\033[1;32mblocks generated:\033[0m\n");
     for (int i = 0; i < g->block_count; i++)
     {
         IR_Basic_Block *block = &g->blocks[i];
@@ -709,7 +674,8 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
         }
     }
 
-    printf("\033[1;33moptimized:\033[0m\n\n");
+#if 1
+    printf("\033[1;32moptimized:\033[0m\n");
 
     for (int i = 0; i < g->block_count; i++)
     {
@@ -734,5 +700,6 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
             print_instruction(e, 1);
         }
     }
+#endif
     return g;
 }

@@ -42,7 +42,7 @@ typedef struct
 {
     int     type;
     char    *name;
-    int     value; 
+    int     value;
     int     line;
     int     col;
     int     c0;
@@ -62,6 +62,7 @@ enum NodeType
     NODE_WHILE,
     NODE_BLOCK,
     NODE_IF,
+    NODE_PRINT,
 };
 
 struct Node
@@ -108,9 +109,10 @@ enum
 
     OP_JMP,
     OP_JMPZ,
+    OP_PRINT,
 };
 
-typedef struct 
+typedef struct
 {
     int op;
     int r0;
@@ -155,5 +157,12 @@ typedef struct
 } Control_Flow_Graph;
 
 void error_token(Token *token, char *fmt, ...);
+Node *parse(Token *tokens);
+Token *tokenize(char *s);
+
+
+void print_ir_code(IR_Code *c);
+Control_Flow_Graph *gen_control_flow_graph(IR_Code *c);
+int gen_ir(IR_Code *c, Node *node);
 
 #endif

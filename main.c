@@ -38,9 +38,11 @@ char *load_entire_file(char *filename)
     return result;
 }
 
-int main()
+#define STRINGIFY(x) #x
+
+int main(void)
 {
-    char *s = load_entire_file("code.txt");
+    char *s = load_entire_file("/Users/zakariafarini/Desktop/Compiler/Compiler/code.txt");
     Token *tokens = tokenize(s);
 
 #if 0
@@ -58,8 +60,8 @@ int main()
 
     IR_Code *c = gen_ir_code(node);
 
-    print_ir_code(c);
-    //sim_ir_code(c);
+ //   print_ir_code(c);
+    sim_ir_code(c);
 
     gen_control_flow_graph(c);
 }

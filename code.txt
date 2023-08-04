@@ -1,6 +1,6 @@
-a = 3
-b = 7
-c = a * b
-d = a * b
-e = c + d
-f = e * 2
+a = 42 + 3 * 27 - 16
+b = a * a + 3 * a / a + (a == 42) - (a > 32)
+c = b + a * b - (b != a) * 42 + b * b
+print a
+print b
+print c
