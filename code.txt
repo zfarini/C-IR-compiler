@@ -1,15 +1,24 @@
-a = 0
-b = 1
-c = a + b
-i = 0
-n = 20
-while (i < n)
+int a
+
+a = 5
 {
-    c = a + b
-    a = b
-    b = c
-    i = i + 1
+    int a
+    a = 92
+    print a
 }
 
-print c
+print a
+int b
+print b
 
+//add(int *x)
+//{
+//    *x = *x + 1
+//}
+//
+//main()
+//{
+//    a = 1
+//    add(&a0)
+//    print a
+//}

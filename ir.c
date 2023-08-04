@@ -29,28 +29,28 @@ char *get_ir_op_str(int type)
     return "UNKOWN_OP_STR";
 }
 
-int get_var_register(IR_Code *c, char *name)
+int get_var_register(IR_Code *c, Node *decl)
 {
     int i = 0;
 
-    while (c->vars_reg[i].name && strcmp(c->vars_reg[i].name, name))
+    while (c->vars_reg[i].decl && c->vars_reg[i].decl != decl)
         i++;
 
-    if (!c->vars_reg[i].name)
+    if (!c->vars_reg[i].decl)
         return (-1);
 
     return c->vars_reg[i].reg;
 }
 
-void set_var_register(IR_Code *c, char *name, int reg)
+void set_var_register(IR_Code *c, Node *decl, int reg)
 {
     int i = 0;
 
-    while (c->vars_reg[i].name && strcmp(c->vars_reg[i].name, name))
+    while (c->vars_reg[i].decl && c->vars_reg[i].decl != decl)
         i++;
 
     assert(i < array_length(c->vars_reg));
-    c->vars_reg[i].name = name;
+    c->vars_reg[i].decl = decl;
     c->vars_reg[i].reg = reg;
 }
 
@@ -95,11 +95,11 @@ int gen_ir(IR_Code *c, Node *node)
     }
     else if (node->type == NODE_VAR)
     {
-        reg = get_var_register(c, node->token->name);
-        if (reg < 0) {
-            reg = c->curr_reg++;
-            set_var_register(c, node->token->name, reg);
-        }
+        assert(node->decl);
+        assert(node->decl->type == NODE_VAR_DECL);
+        reg = get_var_register(c, node->decl);
+        assert(reg >= 0);
+
     }
     else if (node->type == NODE_CALL)
     {
@@ -134,45 +134,6 @@ int gen_ir(IR_Code *c, Node *node)
         reg = c->curr_reg;
         c->curr_reg++;
     }
-#if 0
-    else if (node->type == NODE_WHILE)
-    {
-        int enter_label = c->label_count;
-        int exit_label = c->label_count + 1;
-        int else_label;
-        
-        c->label_count += 2;
-        c->labels[enter_label] = c->instruction_count;
-
-        if (node->else_node)
-        {
-            else_label = c->label_count;
-            c->label_count++;
-        }
-
-        int r0 = gen_ir(c, node->left);
-        IR_Instruction *e = add_instruction(c, OP_JMPZ);
-        e->r0 = r0;
-        e->r1 = (node->else_node ? else_label : exit_label);
-        
-        gen_ir(c, node->right);
-
-        if (node->type == NODE_WHILE)
-        {
-            e = add_instruction(c, OP_JMP);
-            e->r0 = enter_label;
-        }
-        else if (node->else_node)
-        {
-            e = add_instruction(c, OP_JMP);
-            e->r0 = exit_label;
-            c->labels[else_label] = c->instruction_count;
-            gen_ir(c, node->else_node);
-        }
-
-        c->labels[exit_label] = c->instruction_count;
-    }
-#endif
     else if (node->type == NODE_WHILE || node->type == NODE_IF)
     {
         int start_label = c->label_count;
@@ -215,6 +176,11 @@ int gen_ir(IR_Code *c, Node *node)
             curr = curr->next_stmt;
         }
     }
+    else if (node->type == NODE_VAR_DECL)
+    {
+        reg = c->curr_reg++;
+        set_var_register(c, node, reg);
+    }
     else
         assert(0);
     return reg;
@@ -223,6 +189,9 @@ int gen_ir(IR_Code *c, Node *node)
 IR_Code *gen_ir_code(Node *node)
 {
     IR_Code *c = calloc(1, sizeof(*c));
+
+    c->instructions = calloc(sizeof(*c->instructions), 16384);
+    c->labels = calloc(sizeof(*c->labels), 256);
 
     while (node)
     {
@@ -353,10 +322,6 @@ void print_ir_code(IR_Code *c)
             printf("\tL%d:\n", j);
         assert(c->labels[j] <= c->instruction_count);
     }
-    
-    //printf("variables:\n");
-    //for (int i = 0; c->vars_reg[i].name; i++)
-    //    printf("%s -> t%d\n", c->vars_reg[i].name, c->vars_reg[i].reg);
 }
 
 enum
@@ -366,6 +331,7 @@ enum
     VALUE_REGISTER,
     VALUE_OP,
 };
+
 typedef struct
 {
     int type;
@@ -374,39 +340,48 @@ typedef struct
     int v2;
 } Value;
 
-int find_value(Value *values, int value_count, Value *to_find)
+typedef struct 
 {
-    for (int i = 0; i < value_count; i++)
-        if (!memcmp(&values[i], to_find, sizeof(*to_find)))
+    Value   *values;
+    int     *value_owner;
+    int     *register_value;
+    int     max_register_count;
+    int     max_value_count;
+    int     value_count;
+} Local_Value_State;
+
+int find_value(Local_Value_State *s, Value *to_find)
+{
+    for (int i = 0; i < s->value_count; i++)
+        if (!memcmp(&s->values[i], to_find, sizeof(*to_find)))
             return i;
 
-    return value_count;
+    return s->value_count;
 }
 
-void assign_register_to_value(int *value_owner, 
-                                int *register_value, int value_count, int reg, int i)
+void assign_register_to_value(Local_Value_State *s, int reg, int i)
 {
-    assert(i < value_count); 
+    assert(i < s->value_count); 
 
-    for (int j = 0; j < value_count; j++)
+    for (int j = 0; j < s->value_count; j++)
     {
-        if (value_owner[j] == reg)
+        if (s->value_owner[j] == reg)
         {
-            value_owner[j] = -1;
-            for (int k = 0; k < 256; k++)
+            s->value_owner[j] = -1;
+            for (int k = 0; k < s->max_register_count; k++)
             {
-                if (k != reg && register_value[k] == j)
+                if (k != reg && s->register_value[k] == j)
                 {
-                    value_owner[j] = k;
+                    s->value_owner[j] = k;
                     break ;
                 }
             }
         }
     }
 
-    if (value_owner[i] == -1)
-        value_owner[i] = reg;
-    register_value[reg] = i;
+    if (s->value_owner[i] == -1)
+        s->value_owner[i] = reg;
+    s->register_value[reg] = i;
 }
 
 int is_binop_commutative(int op)
@@ -416,16 +391,32 @@ int is_binop_commutative(int op)
             op == OP_NOT_EQUAL);
 }
 
+void add_value_register(Local_Value_State *s, int r)
+{
+    s->register_value[r] = s->value_count;
+    s->values[s->value_count].type = VALUE_REGISTER;
+    s->values[s->value_count].v1 = r;
+    s->value_owner[s->value_count] = r;
+    s->value_count++;
+}
+
 void local_value_numbering_for_basic_block(IR_Basic_Block *b)
 {
-
-    Value   values[1024];
-    int     value_count = 0;
-    int     value_owner[1024];
-    memset(value_owner, -1, sizeof(value_owner));
+    Local_Value_State *s = calloc(1, sizeof(*s)); // idk why not in stack, whatever
     
-    int register_value[256];
-    memset(register_value, -1, sizeof(register_value));
+    s->max_value_count = b->instruction_count * 2;
+    s->max_register_count = 1024;
+
+    s->values           = calloc(s->max_value_count,     sizeof(*s->values));
+    s->value_owner      = calloc(s->max_value_count,     sizeof(*s->value_owner));
+    s->register_value   = calloc(s->max_register_count,  sizeof(*s->register_value));
+    s->value_count = 0;
+    memset(s->value_owner, -1, s->max_value_count * sizeof(*s->value_owner));
+    memset(s->register_value, -1, s->max_register_count * sizeof(*s->register_value));
+
+    int *register_value = s->register_value;
+    int *value_owner = s->value_owner;
+    Value *values = s->values;
 
     for (int i = 0; i < b->instruction_count; i++)
     {
@@ -437,27 +428,20 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
             v.type = (e->r1_imm ? VALUE_CONST : VALUE_REGISTER);
             v.v1 = e->r1;
             
-            int j = find_value(values, value_count, &v);
+            int j = find_value(s, &v);
 
             if (!e->r1_imm && register_value[e->r1] == -1)
-            {
-                assert(j == value_count);
-                register_value[e->r1] = value_count;
-                values[value_count].type = VALUE_REGISTER;
-                values[value_count].v1 = e->r1;
-                value_owner[value_count] = e->r1;
-                value_count++;
-            }
+                add_value_register(s, e->r1);
             if (!e->r1_imm)
                 j = register_value[e->r1];
-            else if (j == value_count)
-                values[value_count++] = v;
+            else if (j == s->value_count)
+                values[s->value_count++] = v;
 
             if (!e->r1_imm)
                 assert(value_owner[j] != -1);
 
             if (e->op != OP_PRINT)
-                assign_register_to_value(value_owner, register_value, value_count, e->r0, j);
+                assign_register_to_value(s, e->r0, j);
 
             if (values[j].type == VALUE_CONST)
             {
@@ -476,21 +460,10 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
             assert(!e->r1_imm && !e->r2_imm);
 
             if (register_value[e->r1] == -1)
-            {
-                register_value[e->r1] = value_count;
-                values[value_count].type = VALUE_REGISTER;
-                values[value_count].v1 = e->r1;
-                value_owner[value_count] = e->r1;
-                value_count++;
-            }
+                add_value_register(s, e->r1);
             if (register_value[e->r2] == -1)
-            {
-                register_value[e->r2] = value_count;
-                values[value_count].type = VALUE_REGISTER;
-                values[value_count].v1 = e->r2;
-                value_owner[value_count] = e->r2;
-                value_count++;
-            }
+                add_value_register(s, e->r2);
+
             v.v1 = register_value[e->r1];
             v.v2 = register_value[e->r2];
 
@@ -501,10 +474,10 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
                 v.v2 = temp;
             }
 
-            int j = find_value(values, value_count, &v);
+            int j = find_value(s, &v);
 
-            if (j == value_count)
-                values[value_count++] = v;
+            if (j == s->value_count)
+                values[s->value_count++] = v;
 
             if (value_owner[j] != -1)
             {
@@ -528,21 +501,21 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
                     e->r1 = eval_op(e->op, e->r1, e->r2);
                     e->op = OP_MOV;
                     e->r1_imm = 1;
-                    Value v3 = {0};
-                    v3.type = VALUE_CONST;
-                    v3.v1 = e->r1;
-                    j = find_value(values, value_count, &v3);
-                    if (j == value_count)
-                        values[value_count++] = v3;
+
+                    Value v3 = {.type = VALUE_CONST, .v1 = e->r1};
+
+                    j = find_value(s, &v3);
+                    if (j == s->value_count)
+                        values[s->value_count++] = v3;
                 }
             }
 
-            assign_register_to_value(value_owner, register_value, value_count, e->r0, j);
+            assign_register_to_value(s, e->r0, j);
         }
     }
 #if 0
     printf("values:\n");
-    for (int j = 0; j < value_count; j++)
+    for (int j = 0; j < s->value_count; j++)
     {
         Value *v = &values[j];
 
@@ -586,12 +559,14 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
         if (i && (label_here || c->instructions[i - 1].op == OP_JMP ||
             c->instructions[i - 1].op == OP_JMPZ))
         {
+            assert(g->block_count < array_length(g->blocks));
             curr_block = &g->blocks[g->block_count];
             curr_block->index = g->block_count;
             curr_block->first_instruction = i;
             g->block_count++;
         }
 
+        assert(curr_block->instruction_count < array_length(curr_block->instructions));
         IR_Instruction *e = &curr_block->instructions[curr_block->instruction_count];
         *e = c->instructions[i];
 

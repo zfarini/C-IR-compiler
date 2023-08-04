@@ -38,11 +38,16 @@ char *load_entire_file(char *filename)
     return result;
 }
 
-#define STRINGIFY(x) #x
-
 IR_Code *cfg_to_ir_code(Control_Flow_Graph *g)
 {
     IR_Code *c = calloc(1, sizeof(*c));
+
+    int total = 0;
+    for (int i = 0; i < g->block_count; i++)
+        total += g->blocks[i].instruction_count;
+
+    c->instructions = calloc(sizeof(*c->instructions), total);
+    c->labels = calloc(sizeof(*c->labels), g->block_count + 1);
 
     for (int i = 0; i < g->block_count; i++)
     {

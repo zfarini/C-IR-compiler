@@ -11,6 +11,7 @@
 #include <stdarg.h>
 
 #define array_length(arr) ((int)(sizeof(arr) / sizeof(*arr)))
+
 #define global static
 #define internal static
 #define local static
@@ -19,7 +20,6 @@ typedef enum
 {
     TOKEN_NUMBER = 256,
     TOKEN_IDENTIFIER,
-
 
     TOKEN_BINARY_BEGIN,
     TOKEN_LOGICAL_AND,
@@ -30,11 +30,14 @@ typedef enum
     TOKEN_GREATER_OR_EQUAL,
     TOKEN_BINARY_END,
 
-    TOKEN_UNKNOWN,
     TOKEN_WHILE,
     TOKEN_IF,
     TOKEN_ELSE,
+    TOKEN_INT,
     TOKEN_FN,
+
+    TOKEN_UNKNOWN,
+
     TOKEN_MAX
 } TokenType;
 
@@ -63,6 +66,7 @@ enum NodeType
     NODE_BLOCK,
     NODE_IF,
     NODE_PRINT,
+    NODE_VAR_DECL,
 };
 
 struct Node
@@ -77,6 +81,17 @@ struct Node
     Node    *first_stmt;
     Node    *next_stmt;
     Node    *else_node;
+    Node    *decl;
+};
+
+typedef struct Scope Scope;
+
+ 
+struct Scope
+{
+    Node    *decls[128];
+    int     decl_count;
+    Scope   *parent;
 };
 
 typedef struct
@@ -85,6 +100,9 @@ typedef struct
     int     first_free_node;
     Token   *tokens;
     int     curr_token;
+    Scope   *curr_scope;
+    Scope   *scopes;
+    int     scope_count;
 } Parser;
 
 enum
@@ -124,14 +142,14 @@ typedef struct
 
 typedef struct
 {
-    IR_Instruction  instructions[4096];
+    IR_Instruction  *instructions;
     int             instruction_count;
     int             curr_reg;
-    int             labels[256];
+    int             *labels;
     int             label_count;
     struct
     {
-        char *name;
+        Node *decl;
         int reg;
     }               vars_reg[256];
 } IR_Code;
@@ -152,17 +170,8 @@ typedef struct
 {
     IR_Basic_Block  blocks[32];
     int             block_count;
-    int             labels[256];
-    int             label_count;
 } Control_Flow_Graph;
 
 void error_token(Token *token, char *fmt, ...);
-Node *parse(Token *tokens);
-Token *tokenize(char *s);
-
-
-void print_ir_code(IR_Code *c);
-Control_Flow_Graph *gen_control_flow_graph(IR_Code *c);
-int gen_ir(IR_Code *c, Node *node);
 
 #endif

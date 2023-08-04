@@ -36,6 +36,7 @@ Token *tokenize(char *s)
         {"if",          TOKEN_IF},
         {"else",        TOKEN_ELSE},
         {"fn",          TOKEN_FN},
+        {"int",         TOKEN_INT},
     };
 
     struct
@@ -73,6 +74,13 @@ Token *tokenize(char *s)
             else
                 col++;
             i++;
+        }
+        if (s[i] == '/' && s[i + 1] == '/')
+        {
+            i += 2;
+            while (s[i] && s[i] != '\n')
+                i++;
+            continue ;
         }
         if (!s[i])
             break ;
