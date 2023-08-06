@@ -56,8 +56,8 @@ typedef struct Node Node;
 
 enum NodeType
 {
-    NODE_FUNC,
-    NODE_CALL,
+    NODE_FUNC_DEF,
+    NODE_FUNC_CALL,
     NODE_NUMBER,
     NODE_VAR,
     NODE_BINOP,
@@ -74,6 +74,7 @@ struct Node
     int     type;
     int     op;
     int     value;
+    Node    *body;
     Node    *next_expr;
     Node    *left;
     Node    *right;
@@ -128,6 +129,8 @@ enum
     OP_JMP,
     OP_JMPZ,
     OP_PRINT,
+    OP_CALL,
+    OP_RET,
 };
 
 typedef struct

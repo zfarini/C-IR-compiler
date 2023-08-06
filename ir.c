@@ -80,6 +80,13 @@ int token_type_to_ir_op(int type)
         assert(0);
 }
 
+struct
+{
+    char *name;
+    int label;
+} function_labels[256];
+int function_label_count = 0;
+
 int gen_ir(IR_Code *c, Node *node)
 {
     int reg = -1;
@@ -101,9 +108,26 @@ int gen_ir(IR_Code *c, Node *node)
         assert(reg >= 0);
 
     }
-    else if (node->type == NODE_CALL)
+    else if (node->type == NODE_FUNC_DEF)
     {
- //       IR_Instruction *e = add_instruction(OP_JMP);
+        c->labels[c->label_count] = c->instruction_count;
+        function_labels[function_label_count].name = node->token->name;
+        function_labels[function_label_count].label = c->label_count;
+        c->label_count++;
+        function_label_count++;
+        gen_ir(c, node->body);
+        add_instruction(c, OP_RET);
+    }
+    else if (node->type == NODE_FUNC_CALL)
+    {
+        IR_Instruction *e = add_instruction(c, OP_CALL);
+
+        int label = -1;
+        for (int i = 0; i < function_label_count; i++)
+            if (!strcmp(node->token->name, function_labels[i].name))
+                label = function_labels[i].label;
+        assert(label != -1);
+        e->r0 = label;
     }
     else if (node->type == NODE_PRINT)
     {
@@ -240,14 +264,34 @@ void sim_ir_code(IR_Code *c)
 
     fflush(stderr); // ??
     printf("\033[1;32msim output:\033[0m\n");
-    while (ip < c->instruction_count)
+
+
+    int start = -1;
+    for (int i = 0; i < function_label_count; i++)
+        if (!strcmp(function_labels[i].name, "main"))
+            start = c->labels[function_labels[i].label];
+    if (start == -1)
+    {
+        printf("SIM ERROR: main is not defined\n");
+        return ;
+    }
+
+    ip = start;
+    int call_stack[256];
+    int call_stack_depth = 0;
+
+    while (1)
     {
         IR_Instruction *e = &c->instructions[ip];
         
         int r1_value = (e->r1_imm ? e->r1 : regs[e->r1]);
         int r2_value = (e->r2_imm ? e->r2 : regs[e->r2]);
 
-        if (e->op == OP_JMP)
+        if (e->op < OP_BINARY)
+            regs[e->r0] = eval_op(e->op, r1_value, r2_value);
+        else if (e->op == OP_MOV)
+            regs[e->r0] = r1_value;
+        else if (e->op == OP_JMP)
         {
             ip = c->labels[e->r0];
             continue ;
@@ -264,13 +308,27 @@ void sim_ir_code(IR_Code *c)
         {
             printf("%d\n", r1_value);
         }
-        else if (e->op < OP_BINARY)
-            regs[e->r0] = eval_op(e->op, r1_value, r2_value);
-        else if (e->op == OP_MOV)
-            regs[e->r0] = r1_value;
+        else if (e->op == OP_CALL)
+        {
+            if (call_stack_depth >= array_length(call_stack))
+            {
+                printf("SIM ERROR: call stack is too deep (%d)\n", array_length(call_stack));
+                return ;
+            }
+            call_stack[call_stack_depth++] = ip + 1;
+            ip = e->r0;
+            continue ;
+        }
+        else if (e->op == OP_RET)
+        {
+            if (call_stack_depth == 0)
+                break ;
+            ip = call_stack[call_stack_depth - 1];
+            call_stack_depth--;
+            continue ;
+        }
         else
             assert(0);
-
         ip++;
     }
 }
@@ -283,6 +341,10 @@ void print_instruction(IR_Instruction *e, int in_block)
         printf("jmpz %s%d t%d", (in_block ? "B" : "L"), e->r0, e->r1);
     else if (e->op == OP_PRINT)
         printf("print %s%d", e->r1_imm ? "" : "t", e->r1);
+    else if (e->op == OP_CALL)
+        printf("call L%d", e->r0);
+    else if (e->op == OP_RET)
+        printf("ret");
     else
     {
         printf("t%d = ", e->r0);

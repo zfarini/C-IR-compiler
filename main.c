@@ -83,9 +83,9 @@ int main(void)
     print_ir_code(c);
     sim_ir_code(c);
 
-    Control_Flow_Graph *g = gen_control_flow_graph(c);
+ //   Control_Flow_Graph *g = gen_control_flow_graph(c);
 
-    IR_Code *final = cfg_to_ir_code(g);
-    print_ir_code(final);
-    sim_ir_code(final);
+ //   IR_Code *final = cfg_to_ir_code(g);
+ //   print_ir_code(final);
+ //   sim_ir_code(final);
 }

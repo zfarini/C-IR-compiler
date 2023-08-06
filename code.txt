@@ -1,15 +1,19 @@
-int a
-
-a = 5
+fn func()
 {
-    int a
-    a = 92
-    print a
+    print 42
 }
 
-print a
-int b
-print b
+fn main()
+{
+    int i
+    i = 0
+    while (i < 10)
+    {
+        func()
+        i = i + 1
+    }
+}
+
 
 //add(int *x)
 //{

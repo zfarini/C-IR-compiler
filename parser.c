@@ -60,7 +60,11 @@ Node *parse(Token *tokens)
     
     enter_scope(&p);
 
-    Node *res = parse_statement(&p);
+    Node *res = 0;
+    if (p.tokens[p.curr_token].type == TOKEN_FN)
+        res = parse_function(&p);
+    else
+        res = parse_statement(&p);
     Node *curr = res;
 
     while (p.tokens[p.curr_token].type)
@@ -93,14 +97,15 @@ Node    *find_var_decl(Parser *p, char *name)
 
 Node *parse_function(Parser *p)
 {
+    printf("Hello\n");
     skip_token(p);
-    Node *node = make_node(p, NODE_FUNC);
+    Node *node = make_node(p, NODE_FUNC_DEF);
     skip_token(p);
 
     skip_token(p);
     // read args
     skip_token(p);
-    node->left = parse_statement(p);
+    node->body = parse_statement(p);
     return node;
 }
 
@@ -199,7 +204,7 @@ Node *parse_atom(Parser *p)
             skip_token(p);
             // read args
             skip_token(p);
-            res->type = NODE_CALL;
+            res->type = NODE_FUNC_CALL;
         }
         else
         {
