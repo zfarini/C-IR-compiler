@@ -120,6 +120,8 @@ int gen_ir(IR_Code *c, Node *node)
 	}
     else if (node->type == NODE_FUNC_DEF)
     {
+		c->vars_reg[0].decl = 0; // check
+
 		Function *f = find_function(c, node->token->name);
 
 		assert(f);
@@ -127,12 +129,39 @@ int gen_ir(IR_Code *c, Node *node)
 		c->labels[f->label] = c->instruction_count;
 		f->first_instruction = c->instruction_count;
 
+		Node *arg = node->first_arg;
+		int	i = 0;
+		while (arg)
+		{
+			set_var_register(c, arg, i + 1);
+			arg = arg->next_arg;
+			i++;
+		}
         gen_ir(c, node->body);
         add_instruction(c, OP_RET);
 		f->instruction_count = c->instruction_count - f->first_instruction;
     }
     else if (node->type == NODE_FUNC_CALL)
     {
+		Node	*arg = node->first_arg;
+		int		i = 0;	
+		int		regs[16];
+
+		while (arg)
+		{
+			regs[i] = gen_ir(c, arg);
+			arg = arg->next_arg;
+			i++;
+		}
+		i = 0;
+		while (i < node->arg_count)
+		{
+			IR_Instruction *e = add_instruction(c, OP_MOV);
+			e->r0 = i + 1;
+			e->r1 = regs[i];
+			i++;
+		}
+
         IR_Instruction *e = add_instruction(c, OP_CALL);
 
 		Function *f = find_function(c, node->token->name);
@@ -230,8 +259,20 @@ int gen_ir(IR_Code *c, Node *node)
 IR_Code *gen_ir_code(Node *node)
 {
     IR_Code *c = calloc(1, sizeof(*c));
+	
+	c->reserved_reg = 0;
+	{
+		Node *curr = node;
+		while (curr)
+		{
+			if (curr->arg_count > c->reserved_reg)
+				c->reserved_reg = curr->arg_count;
+			curr = curr->next_func;
+		}
+	}
+	c->reserved_reg++; // max param + return value
 
-	c->curr_reg = 1;
+	c->curr_reg = c->reserved_reg;
     c->instructions = calloc(sizeof(*c->instructions), 16384);
     c->labels = calloc(sizeof(*c->labels), 256);
 	c->functions = calloc(sizeof(*c->functions), 64);
@@ -390,7 +431,7 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
 
 void print_ir_code(IR_Code *c)
 {
-    printf("\033[1;32mgenerated ir:\033[0m (%d instructions)\n", c->instruction_count);
+    printf("\033[1;32mgenerated ir:\033[0m (%d instructions, %d reserved registers)\n", c->instruction_count, c->reserved_reg);
 
     for (int i = 0; i < c->instruction_count; i++)
     {
@@ -791,7 +832,9 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
     {
 
         int register_used[256] = {0};
-		register_used[0] = 100;
+
+		memset(register_used, 1, c->reserved_reg * sizeof(int)); // have a big value for the reserved regs
+
         for (int i = 0; i < g->block_count; i++)
         {
             for (int j = 0; j < g->blocks[i].instruction_count; j++)

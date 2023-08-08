@@ -54,6 +54,8 @@ Token *tokenize(char *s)
         {"||",      TOKEN_LOGICAL_OR},
     };
 
+	char	*single_char_tokens = "+-*/%<>()=;{}!,";
+
     int max_token_count = (int)strlen(s) + 1;
     Token   *tokens = calloc(sizeof(Token), max_token_count);
 
@@ -134,7 +136,7 @@ Token *tokenize(char *s)
             
             if (token->type == TOKEN_UNKNOWN)
             {
-                if (find_char_in_str("+-*/%<>()=;{}!", s[i]))
+                if (find_char_in_str(single_char_tokens, s[i]))
                 {
                     token->type = s[i];
                     i++;

@@ -28,6 +28,16 @@ Token *skip_token(Parser *p)
     return token;
 }
 
+Token *expect_token(Parser *p, int type)
+{
+	Token *token = &p->tokens[p->curr_token];
+
+	if (token->type != type)
+		error_token(token, "unexpected token"); // use type
+	p->curr_token++;
+	return token;
+}
+
 Node *parse_function(Parser *p);
 Node *parse_statement(Parser *p);
 Node *parse_expr(Parser *p, int min_prec);
@@ -89,18 +99,65 @@ Node    *find_var_decl(Parser *p, char *name)
     return 0;
 }
 
+Node *parse_decl(Parser *p)
+{
+	expect_token(p, TOKEN_INT);
+
+    Node *node = make_node(p, NODE_VAR_DECL);
+
+    for (int i = 0; i < p->curr_scope->decl_count; i++)
+        if (!strcmp(p->curr_scope->decls[i]->token->name, node->token->name))
+            error_token(node->token, "redeclaration of variable '%s'", node->token->name);
+
+    p->curr_scope->decls[p->curr_scope->decl_count] = node;
+    p->curr_scope->decl_count++;
+
+	expect_token(p, TOKEN_IDENTIFIER);
+	
+	return node;
+}
+
 Node *parse_function(Parser *p)
 {
-	if (get_curr_token(p)->type != TOKEN_FN)
-		error_token(get_curr_token(p), "expected a function");
-    skip_token(p);
-    Node *node = make_node(p, NODE_FUNC_DEF);
-    skip_token(p);
+	expect_token(p, TOKEN_FN);
 
-    skip_token(p);
+    Node *node = make_node(p, NODE_FUNC_DEF);
+
+	expect_token(p, TOKEN_IDENTIFIER);
+	expect_token(p, '(');
+
+	enter_scope(p);
+
+	Node *curr = node;
+
+	while (get_curr_token(p)->type != ')' 
+			&& get_curr_token(p)->type)
+	{
+		Node *decl = parse_decl(p);
+		
+		if (curr == node)
+			node->first_arg = decl;
+		else
+			curr->next_arg = decl;
+
+		curr = decl;
+
+		node->arg_count++;
+
+		if (get_curr_token(p)->type == ',')
+			skip_token(p);
+		else if (get_curr_token(p)->type != ')')
+			error_token(get_curr_token(p), "expected ',' or ')'");
+	}
     // read args
-    skip_token(p);
+	expect_token(p, ')');
+
+	expect_token(p, '{');
+	p->curr_token--; // we call expect just for the error
+
     node->body = parse_statement(p);
+
+	leave_scope(p);
     return node;
 }
 
@@ -109,18 +166,8 @@ Node *parse_statement(Parser *p)
     Node *node = 0;
 
     if (get_curr_token(p)->type == TOKEN_INT)
-    {
-        skip_token(p);
-        if (get_curr_token(p)->type != TOKEN_IDENTIFIER)
-            error_token(get_curr_token(p), "expected variable name");
-        node = make_node(p, NODE_VAR_DECL);
-        for (int i = 0; i < p->curr_scope->decl_count; i++)
-            if (!strcmp(p->curr_scope->decls[i]->token->name, node->token->name))
-                error_token(node->token, "redeclaration of variable '%s'", node->token->name);
-        p->curr_scope->decls[p->curr_scope->decl_count] = node;
-        p->curr_scope->decl_count++;
-        skip_token(p);
-    }
+		node = parse_decl(p);
+
 	else if (get_curr_token(p)->type == TOKEN_RETURN)
 	{
 		node = make_node(p, NODE_RETURN);
@@ -186,38 +233,59 @@ Node *parse_statement(Parser *p)
 
 Node *parse_atom(Parser *p)
 {
-    Node *res = 0;
+    Node *node = 0;
 
     Token *token = get_curr_token(p);
 
     if (token->type == TOKEN_NUMBER)
     {
-        res = make_node(p, NODE_NUMBER);
+        node = make_node(p, NODE_NUMBER);
         skip_token(p);
     }
     else if (token->type == TOKEN_IDENTIFIER)
     {
-        res = make_node(p, NODE_VAR);
+        node = make_node(p, NODE_VAR);
         skip_token(p);
 
         if (get_curr_token(p)->type == '(')
         {
             skip_token(p);
-            // read args
-            skip_token(p);
-            res->type = NODE_FUNC_CALL;
+
+			Node *curr = node;
+
+			// very similar to parse_function
+			while (get_curr_token(p)->type != ')' &&
+					get_curr_token(p)->type)
+			{
+				Node *arg = parse_expr(p, 0);
+
+				if (curr == node)
+					node->first_arg = arg;
+				else
+					curr->next_arg = arg;
+				curr = arg;
+
+				node->arg_count++;
+
+				if (get_curr_token(p)->type == ',')
+					skip_token(p);
+				else if (get_curr_token(p)->type != ')')
+					error_token(get_curr_token(p), "expected ',' or ')'");
+			}
+			expect_token(p, ')');
+            node->type = NODE_FUNC_CALL;
         }
         else
         {
-            res->decl = find_var_decl(p, res->token->name);
-            if (!res->decl)
-                error_token(res->token, "undeclared variable '%s'", res->token->name);
+            node->decl = find_var_decl(p, node->token->name);
+            if (!node->decl)
+                error_token(node->token, "undeclared variable '%s'", node->token->name);
         }
     }
     else if (token->type == '(')
     {
         skip_token(p);
-        res = parse_expr(p, 0);
+        node = parse_expr(p, 0);
         if (get_curr_token(p)->type != ')')
             error_token(get_curr_token(p), "expected ')'");
         else
@@ -226,20 +294,21 @@ Node *parse_atom(Parser *p)
     else if (token->type == '+')
     {
         skip_token(p);
-        res = parse_atom(p);
+        node = parse_atom(p);
     }
     else if (token->type == '-')
     {
-        res = make_node(p, NODE_BINOP);
+        node = make_node(p, NODE_BINOP);
         skip_token(p);
-        res->op = '-';
-        res->left = make_node(p, NODE_NUMBER);
-        res->left->value = 0;
-        res->right = parse_atom(p);
+        node->op = '-';
+        node->left = make_node(p, NODE_NUMBER);
+        node->left->value = 0;
+        node->right = parse_atom(p);
     }
     else
         error_token(get_curr_token(p), "expected an expression");
-    return (res);
+
+    return (node);
 }
 
 char *find_char_in_str(char *s, char c);

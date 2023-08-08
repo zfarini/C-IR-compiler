@@ -86,6 +86,10 @@ struct Node
     Node    *else_node;
     Node    *decl;
 	Node	*next_func;
+
+	Node	*first_arg;
+	Node	*next_arg;
+	int		arg_count;
 };
 
 typedef struct Scope Scope;
@@ -162,6 +166,7 @@ typedef struct
     IR_Instruction  *instructions;
     int             instruction_count;
     int             curr_reg;
+	int				reserved_reg;
     int             *labels;
     int             label_count;
 

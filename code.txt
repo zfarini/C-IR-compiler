@@ -1,27 +1,25 @@
-fn func1()
+fn double(int a)
 {
-	return 10
+	return a * 2
 }
 
-fn func2()
+fn add(int a, int b)
 {
-	return func1() * 2
+	return a + b
 }
 
+//TODO: test with f(f(), f() + f())
 fn main()
 {
-	print func1() + func2()
+	print double(add(3, add(1, double(2))))
 }
 
 
-//add(int *x)
-//{
-//    *x = *x + 1
-//}
-//
-//main()
-//{
-//    a = 1
-//    add(&a0)
-//    print a
-//}
+//double:
+//	t0 = t1 * 2
+//	ret
+//main:
+//	t1 = 5
+//	call double
+//	print t0
+

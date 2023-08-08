@@ -55,11 +55,13 @@ IR_Code *cfg_to_ir_code(IR_Code *c)
 		total_blocks += g->block_count;
 	}
 
+	// why *res = *c crashes??
     res->instructions = calloc(sizeof(*c->instructions), total_instructions);
     res->labels = calloc(sizeof(*c->labels), total_blocks + c->function_count);
 	res->functions = calloc(sizeof(*res->functions), c->function_count);
 	res->function_count = c->function_count;
-	res->label_count += res->function_count;
+	res->label_count = res->function_count;
+	res->reserved_reg = c->reserved_reg;
 	memcpy(res->vars_reg, c->vars_reg, sizeof(c->vars_reg));
 
 	for (int i = 0; i < c->function_count; i++)
