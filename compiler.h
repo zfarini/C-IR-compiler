@@ -138,6 +138,8 @@ enum
     OP_PRINT,
     OP_CALL,
     OP_RET,
+	OP_PUSH,
+	OP_POP,
 };
 
 typedef struct
@@ -154,6 +156,7 @@ typedef struct Control_Flow_Graph Control_Flow_Graph;
 
 typedef struct
 {
+	Node				*decl;
 	char				*name;
 	int					first_instruction;
 	int					instruction_count;
@@ -172,6 +175,7 @@ typedef struct
 
 	Function		*functions;
 	int				function_count;
+	Function		*curr_func;
 
     struct
     {

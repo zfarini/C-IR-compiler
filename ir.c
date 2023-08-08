@@ -124,6 +124,7 @@ int gen_ir(IR_Code *c, Node *node)
 
 		Function *f = find_function(c, node->token->name);
 
+		c->curr_func = f;
 		assert(f);
 
 		c->labels[f->label] = c->instruction_count;
@@ -140,6 +141,7 @@ int gen_ir(IR_Code *c, Node *node)
         gen_ir(c, node->body);
         add_instruction(c, OP_RET);
 		f->instruction_count = c->instruction_count - f->first_instruction;
+
     }
     else if (node->type == NODE_FUNC_CALL)
     {
@@ -147,12 +149,40 @@ int gen_ir(IR_Code *c, Node *node)
 		int		i = 0;	
 		int		regs[16];
 
+		// execute args
+		// [arg1, arg2 ... argn]
+		//
+
+		// TODO: check if this correct always
+		// also you don't need to save the result unless you will be called in the arguments
+		i = 0;
 		while (arg)
 		{
 			regs[i] = gen_ir(c, arg);
+			assert(regs[i] != -1);
+			add_instruction(c, OP_PUSH)->r1 = regs[i];
 			arg = arg->next_arg;
 			i++;
 		}
+
+		// save my arguments
+
+
+		i = node->arg_count - 1;
+		while (i >= 0)
+		{
+			add_instruction(c, OP_POP)->r1 = regs[i];
+			i--;
+		}
+
+		i = 0;
+		while (i < c->curr_func->decl->arg_count)
+		{
+			add_instruction(c, OP_PUSH)->r1 = i + 1;
+
+			i++;
+		}
+
 		i = 0;
 		while (i < node->arg_count)
 		{
@@ -164,11 +194,21 @@ int gen_ir(IR_Code *c, Node *node)
 
         IR_Instruction *e = add_instruction(c, OP_CALL);
 
+		i = c->curr_func->decl->arg_count - 1;
+		while (i >= 0)
+		{
+			IR_Instruction *e = add_instruction(c, OP_POP);
+			e->r1 = i + 1;
+			i--;
+		}
+
 		Function *f = find_function(c, node->token->name);
+
 		assert(f);
 
 		e->r0 = f->label;
 
+		//reg = 0;
 		e = add_instruction(c, OP_MOV);
 		e->r0 = c->curr_reg++;
 		e->r1 = 0;
@@ -194,7 +234,9 @@ int gen_ir(IR_Code *c, Node *node)
     else if (node->type == NODE_BINOP)
     {
         int r1 = gen_ir(c, node->left);
+		add_instruction(c, OP_PUSH)->r1 = r1;
         int r2 = gen_ir(c, node->right);
+		add_instruction(c, OP_POP)->r1 = r1;
 
         IR_Instruction *e = add_instruction(c, token_type_to_ir_op(node->op));
         e->r0 = c->curr_reg;
@@ -284,6 +326,7 @@ IR_Code *gen_ir_code(Node *node)
 
 		f->name = curr->token->name;
 		f->label = c->label_count++;
+		f->decl = curr;
 
 		curr = curr->next_func;
 	}
@@ -347,8 +390,10 @@ void sim_ir_code(IR_Code *c)
     }
 
     ip = main->first_instruction;
-    int call_stack[256];
-    int call_stack_depth = 0;
+	int stack_max = 4096;
+	int *stack = malloc(stack_max * sizeof(int));
+	memset(stack, 0xcc, stack_max * sizeof(int));
+	int stack_top = 0;
 
     while (1)
     {
@@ -378,29 +423,47 @@ void sim_ir_code(IR_Code *c)
         {
             printf("%d\n", r1_value);
         }
+		else if (e->op == OP_PUSH)
+		{
+			if (stack_top == stack_max)
+			{
+				printf("SIM ERROR: stack overflow\n");
+				return ;
+			}
+			stack[stack_top++] = regs[e->r1];
+		}
+		else if (e->op == OP_POP)
+		{
+			if (!stack_top)
+			{
+				printf("SIM ERROR: pop on an empty stack\n");
+				return ;
+			}
+			regs[e->r1] = stack[--stack_top];
+		}
         else if (e->op == OP_CALL)
         {
-            if (call_stack_depth >= array_length(call_stack))
-            {
-                printf("SIM ERROR: call stack is too deep (%d)\n", array_length(call_stack));
-                return ;
-            }
-            call_stack[call_stack_depth++] = ip + 1;
+			if (stack_top == stack_max)
+			{
+				printf("SIM ERROR: stack overflow\n");
+				return ;
+			}
+			stack[stack_top++] = ip + 1;
             ip = c->labels[e->r0];
             continue ;
         }
         else if (e->op == OP_RET)
         {
-            if (call_stack_depth == 0)
+            if (stack_top == 0)
                 break ;
-            ip = call_stack[call_stack_depth - 1];
-            call_stack_depth--;
+            ip = stack[--stack_top];
             continue ;
         }
         else
             assert(0);
         ip++;
     }
+	free(stack);
 }
 
 void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
@@ -411,6 +474,10 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
         printf("jmpz %s%d t%d", (in_block ? "B" : "L"), e->r0, e->r1);
     else if (e->op == OP_PRINT)
         printf("print %s%d", e->r1_imm ? "" : "t", e->r1);
+	else if (e->op == OP_PUSH)
+		printf("push %s%d", e->r1_imm ? "" : "t", e->r1);
+	else if (e->op == OP_POP)
+		printf("pop t%d", e->r1);
     else if (e->op == OP_CALL)
         printf("call %s", c->functions[in_block ? -e->r0 : e->r0].name);
     else if (e->op == OP_RET)
@@ -448,7 +515,7 @@ void print_ir_code(IR_Code *c)
             }
         }
 
-        printf("%-16s", "");
+        printf("%-16d", i);
         print_instruction(c, e, 0);
     }
 
@@ -500,6 +567,8 @@ void assign_register_to_value(Local_Value_State *s, int reg, int i)
 {
     assert(i < s->value_count); 
 
+	if (s->register_value[reg] == i)
+		return ;
     for (int j = 0; j < s->value_count; j++)
     {
         if (s->value_owner[j] == reg)
@@ -537,7 +606,7 @@ void add_value_register(Local_Value_State *s, int r)
     s->value_count++;
 }
 
-void local_value_numbering_for_basic_block(IR_Basic_Block *b)
+void local_value_numbering_for_basic_block(IR_Code *c, IR_Basic_Block *b)
 {
     Local_Value_State *s = calloc(1, sizeof(*s)); // idk why not in stack, whatever
     
@@ -561,14 +630,21 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
 
 		if (e->op == OP_CALL)
 		{
-			Value v = {0};
-			v.type = VALUE_FUNC_CALL;
-			v.v1 = i; // just to avoid matching with another function call
-			values[s->value_count++] = v;
-			assign_register_to_value(s, 0, s->value_count - 1);
+
+			for (int j = 0; j < c->reserved_reg; j++) // use 1 + function_arg_count
+			{
+				Value v = {0};
+				v.type = VALUE_FUNC_CALL;
+				v.v1 = i; // just to avoid matching with another function call
+				v.v2 = j;
+				values[s->value_count++] = v;
+				assign_register_to_value(s, j, s->value_count - 1);
+			}
+
 		}
-		else if (e->op == OP_MOV || e->op == OP_PRINT)
+		else if (e->op == OP_MOV || e->op == OP_PRINT || e->op == OP_PUSH)
         {
+
             Value v = {0};
             v.type = (e->r1_imm ? VALUE_CONST : VALUE_REGISTER);
             v.v1 = e->r1;
@@ -595,6 +671,7 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
             }
             else
                 e->r1 = value_owner[j];
+
         }
         else if (e->op < OP_BINARY)
         {
@@ -706,6 +783,13 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
 
 }
 
+void remove_instruction(IR_Basic_Block *b, int i)
+{
+	for (int j = i + 1; j < b->instruction_count; j++)
+		b->instructions[j - 1] = b->instructions[j];
+    b->instruction_count--;
+}
+
 Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
 {
     Control_Flow_Graph *g = calloc(1, sizeof(*g));
@@ -791,11 +875,14 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
                 block->childs[block->child_count++] = &g->blocks[i + 1];
             block->childs[block->child_count++] = &g->blocks[last_inst->r1];
         }
+		else if (last_inst->op == OP_RET) // we could just leave it with no childs?
+			block->childs[block->child_count++] = &g->blocks[g->block_count];
         else
             block->childs[block->child_count++] = &g->blocks[i + 1];
 #endif
     }
 
+#if 1
 	printf("\033[4;33mfunction %s:\033[0m\n", f->name);
     printf("\033[1;34mbasic blocks:\033[0m\n");
     for (int i = 0; i < g->block_count; i++)
@@ -819,13 +906,14 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
             print_instruction(c, e, 1);
         }
     }
+#endif
 
 #if 1
     for (int i = 0; i < g->block_count; i++)
     {
         IR_Basic_Block *block = &g->blocks[i];
 
-        local_value_numbering_for_basic_block(block);
+        local_value_numbering_for_basic_block(c, block);
 	}
 #if 1
     while (1)
@@ -842,11 +930,11 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
                 IR_Instruction *e = &g->blocks[i].instructions[j];
 
                  if (!e->r1_imm && (e->op == OP_MOV || 
-                     e->op == OP_PRINT || e->op == OP_JMPZ || e->op < OP_BINARY))
+                     e->op == OP_PRINT || e->op == OP_JMPZ || e->op < OP_BINARY ||
+					 e->op == OP_PUSH))
                      register_used[e->r1]++;
                  if (e->op < OP_BINARY && !e->r2_imm)
                      register_used[e->r2]++;
-
             }
         }
 
@@ -861,8 +949,7 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
                 int remove = 0;
                 // this is a block optimization for now, I'm not sure if can extended it to global
                 // it happens when a register is used once to store an op and then moved to another
-                // one
-                if ((e->op == OP_MOV || e->op < OP_BINARY) && register_used[e->r0] == 1)
+				if ((e->op == OP_MOV || e->op < OP_BINARY) && register_used[e->r0] == 1)
                 {
                     for (int k = j + 1; k < g->blocks[i].instruction_count; k++)
                     {
@@ -880,20 +967,53 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
                     }
                 }
                 if (remove || (((e->op == OP_MOV || e->op < OP_BINARY) && !register_used[e->r0])
-                    || (e->op == OP_MOV && !e->r1_imm && e->r0 == e->r1)))
+                    || (e->op == OP_MOV && !e->r1_imm && e->r0 == e->r1)) ||
+						(e->op == OP_POP && !register_used[e->r1]))
                 {
-                    for (int k = j + 1; k < g->blocks[i].instruction_count; k++)
-                        g->blocks[i].instructions[k - 1] = g->blocks[i].instructions[k];
-                    g->blocks[i].instruction_count--;
+					int op = e->op;
+					remove_instruction(&g->blocks[i], j);
+
+
+					if (op == OP_POP)
+					{
+
+						int k = j - 1;
+						for (; k >= 0; k--)
+							if (g->blocks[i].instructions[k].op == OP_PUSH)
+								break ;
+						assert(k >= 0);
+
+						remove_instruction(&g->blocks[i], k);
+					}
+					j--;
                     end = 0;
                 }
+				else if (e->op == OP_PUSH)
+				{
+					int k = j + 1;
+					int ok = 1;
+					for (; k < g->blocks[i].instruction_count; k++)
+					{
+						if (g->blocks[i].instructions[k].op == OP_CALL)
+							ok = 0;
+						else if (g->blocks[i].instructions[k].op == OP_POP)
+							break ;
+					}
+					if (ok && k < g->blocks[i].instruction_count && 
+							e->r1 == g->blocks[i].instructions[k].r1)
+					{
 
+						remove_instruction(&g->blocks[i], j);
+						remove_instruction(&g->blocks[i], k - 1);
+						j--;
+					}
+				}
             }
         }
         if (end)
             break ;
     }
-
+#if 1
     printf("\033[1;32moptimized blocks:\033[0m\n");
 
     for (int i = 0; i < g->block_count; i++)
@@ -917,6 +1037,7 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
             print_instruction(c, e, 1);
         }
     }
+#endif
 #endif
 #endif
 

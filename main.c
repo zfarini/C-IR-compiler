@@ -131,25 +131,4 @@ int main(void)
 
 	sim_ir_code(final);
 
-//	for (int i = 0; i < final->function_count; i++)
-//		final->functions[i].cfg = gen_function_control_flow_graph(final, &final->functions[i]);
-	
-   // int ip = 0;
-   // for (int i = 0; i < c->function_count; i++)
-   // {
-   //     IR_Code t = *c;
-
-   //     int end = ip;
-   //     while (1)
-   //     {
-   //         for (int j = 0; j < c->label_count; j++)
-   //             
-   //      
-   //     Control_Flow_Graph *g = gen_control_flow_graph(&t);
-   // }
-
-    //Control_Flow_Graph *g = gen_control_flow_graph(c);
-    //IR_Code *final = cfg_to_ir_code(g);
-    //print_ir_code(final);
-  //  sim_ir_code(final);
 }

@@ -1,6 +1,9 @@
-fn double(int a)
+fn fib(int n)
 {
-	return a * 2
+	if (n <= 1)
+		return n
+
+	return fib(n - 1) + fib(n - 2)
 }
 
 fn add(int a, int b)
@@ -8,10 +11,10 @@ fn add(int a, int b)
 	return a + b
 }
 
-//TODO: test with f(f(), f() + f())
+// 0 1 1 2 3 5
 fn main()
 {
-	print double(add(3, add(1, double(2))))
+	print fib(fib(fib(2) + fib(3 + fib(2))) + fib(fib(4)))
 }
 
 
