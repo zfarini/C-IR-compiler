@@ -80,6 +80,16 @@ int token_type_to_ir_op(int type)
         assert(0);
 }
 
+Function *find_function(IR_Code *c, char *name)
+{
+	for (int i = 0; i < c->function_count; i++)
+		if (!strcmp(name, c->functions[i].name))
+			return &c->functions[i];
+
+	return 0;
+}
+
+
 int gen_ir(IR_Code *c, Node *node)
 {
     int reg = -1;
@@ -103,25 +113,25 @@ int gen_ir(IR_Code *c, Node *node)
     }
     else if (node->type == NODE_FUNC_DEF)
     {
-        c->labels[c->label_count] = c->instruction_count;
-        c->functions_labels[c->function_count].name = node->token->name;
-        c->functions_labels[c->function_count].label = c->label_count;
-        c->label_function_name[c->label_count] = node->token->name;
-        c->label_count++;
-        c->function_count++;
+		Function *f = find_function(c, node->token->name);
+
+		assert(f);
+
+		c->labels[f->label] = c->instruction_count;
+		f->first_instruction = c->instruction_count;
+
         gen_ir(c, node->body);
         add_instruction(c, OP_RET);
+		f->instruction_count = c->instruction_count - f->first_instruction;
     }
     else if (node->type == NODE_FUNC_CALL)
     {
         IR_Instruction *e = add_instruction(c, OP_CALL);
 
-        int label = -1;
-        for (int i = 0; i < c->function_count; i++)
-            if (!strcmp(node->token->name, c->functions_labels[i].name))
-                label = c->functions_labels[i].label;
-        assert(label != -1);
-        e->r0 = label;
+		Function *f = find_function(c, node->token->name);
+		assert(f);
+
+		e->r0 = f->label;
     }
     else if (node->type == NODE_PRINT)
     {
@@ -210,11 +220,24 @@ IR_Code *gen_ir_code(Node *node)
 
     c->instructions = calloc(sizeof(*c->instructions), 16384);
     c->labels = calloc(sizeof(*c->labels), 256);
+	c->functions = calloc(sizeof(*c->functions), 64);
 
-    while (node)
+	Node *curr = node;
+	while (curr)
+	{
+		Function *f = &c->functions[c->function_count++];
+
+		f->name = curr->token->name;
+		f->label = c->label_count++;
+
+		curr = curr->next_func;
+	}
+
+	curr = node;
+    while (curr)
     {
-        gen_ir(c, node);
-        node = node->next_expr;
+        gen_ir(c, curr);
+		curr = curr->next_func;
     }
 
     return c;
@@ -260,17 +283,15 @@ void sim_ir_code(IR_Code *c)
     printf("\033[1;32msim output:\033[0m\n");
 
 
-    int start = -1;
-    for (int i = 0; i < c->function_count; i++)
-        if (!strcmp(c->functions_labels[i].name, "main"))
-            start = c->labels[c->functions_labels[i].label];
-    if (start == -1)
+	Function *main = find_function(c, "main");
+
+    if (!main)
     {
         printf("SIM ERROR: main is not defined\n");
         return ;
     }
 
-    ip = start;
+    ip = main->first_instruction;
     int call_stack[256];
     int call_stack_depth = 0;
 
@@ -336,7 +357,7 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
     else if (e->op == OP_PRINT)
         printf("print %s%d", e->r1_imm ? "" : "t", e->r1);
     else if (e->op == OP_CALL)
-        printf("call %s", c->label_function_name[e->r0]);
+        printf("call %s", c->functions[in_block ? -e->r0 : e->r0].name);
     else if (e->op == OP_RET)
         printf("ret");
     else
@@ -356,7 +377,6 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
 void print_ir_code(IR_Code *c)
 {
     printf("\033[1;32mgenerated ir:\033[0m\n");
-    printf("count: %d\n", c->instruction_count);
 
     for (int i = 0; i < c->instruction_count; i++)
     {
@@ -366,14 +386,14 @@ void print_ir_code(IR_Code *c)
         {
             if (c->labels[j] == i)
             {
-                if (c->label_function_name[j])
-                    printf("\t%s:\n", c->label_function_name[j]);
+				if (j < c->function_count)
+					printf("%s:\n", c->functions[j].name);
                 else
                     printf("\tL%d:\n", j);
             }
         }
 
-        printf("%-16d", i);
+        printf("%-16s", "");
         print_instruction(c, e, 0);
     }
 
@@ -518,15 +538,34 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
             v.type = VALUE_OP;
             v.op = e->op;
 
-            assert(!e->r1_imm && !e->r2_imm);
+            //assert(!e->r1_imm && !e->r2_imm);
 
-            if (register_value[e->r1] == -1)
+            if (!e->r1_imm && register_value[e->r1] == -1)
                 add_value_register(s, e->r1);
-            if (register_value[e->r2] == -1)
+            if (!e->r2_imm && register_value[e->r2] == -1)
                 add_value_register(s, e->r2);
 
-            v.v1 = register_value[e->r1];
-            v.v2 = register_value[e->r2];
+			if (e->r1_imm)
+			{
+				Value v1 = {.type = VALUE_CONST, .v1 = e->r1};	
+				int j = find_value(s, &v1);
+				if (j == s->value_count)
+					values[s->value_count++] = v1;
+				v.v1 = j;
+			}
+			else
+            	v.v1 = register_value[e->r1];
+
+			if (e->r2_imm)
+			{
+				Value v2 = {.type = VALUE_CONST, .v1 = e->r2};	
+				int j = find_value(s, &v2);
+				if (j == s->value_count)
+					values[s->value_count++] = v2;
+				v.v2 = j;
+			}
+			else
+            	v.v2 = register_value[e->r2];
 
             if (v.v1 > v.v2 && is_binop_commutative(e->op))
             {
@@ -547,15 +586,21 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
             }
             else
             {
-                if (values[register_value[e->r1]].type == VALUE_CONST)
-                    e->r1_imm = 1, e->r1 = values[register_value[e->r1]].v1;
-                else
-                    e->r1 = value_owner[register_value[e->r1]];
+				if (!e->r1_imm)
+				{
+               		if (values[register_value[e->r1]].type == VALUE_CONST)
+               		    e->r1_imm = 1, e->r1 = values[register_value[e->r1]].v1;
+               		else
+               		    e->r1 = value_owner[register_value[e->r1]];
+				}
 
-                if (values[register_value[e->r2]].type == VALUE_CONST)
-                    e->r2_imm = 1, e->r2 = values[register_value[e->r2]].v1;
-                else
-                    e->r2 = value_owner[register_value[e->r2]];
+				if (!e->r2_imm)
+				{
+               	 	if (values[register_value[e->r2]].type == VALUE_CONST)
+               	 	    e->r2_imm = 1, e->r2 = values[register_value[e->r2]].v1;
+               	 	else
+               	 	    e->r2 = value_owner[register_value[e->r2]];
+				}
 
                 if (e->r1_imm && e->r2_imm)
                 {
@@ -595,7 +640,7 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
 
 }
 
-Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
+Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
 {
     Control_Flow_Graph *g = calloc(1, sizeof(*g));
 
@@ -604,7 +649,9 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
     int label_to_block_index[256];
     memset(label_to_block_index, -1, sizeof(label_to_block_index));
 
-    for (int i = 0; i < c->instruction_count; i++)
+	int last_instruction = f->first_instruction + f->instruction_count;
+
+    for (int i = f->first_instruction; i < last_instruction; i++)
     {
         int label_here = 0;
 
@@ -612,12 +659,12 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
         {
             if (c->labels[j] == i)
             {
-                label_to_block_index[j] = (i ? g->block_count : 0);
+                label_to_block_index[j] = (i != f->first_instruction ? g->block_count : 0);
                 label_here = 1;
             }
         }
 
-        if (i && (label_here || c->instructions[i - 1].op == OP_JMP ||
+        if (i != f->first_instruction && (label_here || c->instructions[i - 1].op == OP_JMP ||
             c->instructions[i - 1].op == OP_JMPZ ||
             c->instructions[i - 1].op == OP_RET))
         {
@@ -640,7 +687,7 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
 
     for (int j = 0; j < c->label_count; j++)
     {
-        if (c->labels[j] == c->instruction_count)
+        if (c->labels[j] == last_instruction)
             label_to_block_index[j] = g->block_count;
     }
 
@@ -651,8 +698,18 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
         // change jumps to point to block indices instead of labels
         for (int j = 0; j < block->instruction_count; j++)
         {
-            if (block->instructions[j].op == OP_JMP || block->instructions[j].op == OP_JMPZ)
-                block->instructions[j].r0 = label_to_block_index[block->instructions[j].r0];
+            if (block->instructions[j].op == OP_JMP || block->instructions[j].op == OP_JMPZ 
+				|| block->instructions[j].op == OP_CALL)
+			{
+				if (block->instructions[j].r0 < c->function_count)
+				{
+					// later we may want to jmp directly to a function
+					assert(block->instructions[j].op == OP_CALL);
+					block->instructions[j].r0 *= -1;
+				}
+				else
+                	block->instructions[j].r0 = label_to_block_index[block->instructions[j].r0];
+			}
         }
 
 #if 1
@@ -673,7 +730,8 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
 #endif
     }
 
-    printf("\033[1;32mblocks generated:\033[0m\n");
+	printf("\033[4;33mfunction %s:\033[0m\n", f->name);
+    printf("\033[1;34mbasic blocks:\033[0m\n");
     for (int i = 0; i < g->block_count; i++)
     {
         IR_Basic_Block *block = &g->blocks[i];
@@ -697,31 +755,12 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
     }
 
 #if 1
-    printf("\033[1;32moptimized:\033[0m\n");
-
     for (int i = 0; i < g->block_count; i++)
     {
         IR_Basic_Block *block = &g->blocks[i];
 
         local_value_numbering_for_basic_block(block);
-
-        printf("optimized block %d (%d instructions, childs: [", i, block->instruction_count);
-        for (int j = 0; j < block->child_count; j++)
-        {
-            printf("%d", block->childs[j]->index);
-            if (j + 1 < block->child_count)
-                printf(", ");
-        }
-        printf("]):\n");
-
-        for (int j = 0; j < block->instruction_count; j++)
-        {
-            IR_Instruction *e = &block->instructions[j];
-
-            printf("\t\t");
-            print_instruction(c, e, 1);
-        }
-    }
+	}
 #if 1
     while (1)
     {
@@ -783,6 +822,30 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
         }
         if (end)
             break ;
+    }
+
+    printf("\033[1;32moptimized blocks:\033[0m\n");
+
+    for (int i = 0; i < g->block_count; i++)
+    {
+        IR_Basic_Block *block = &g->blocks[i];
+
+        printf("block %d (%d instructions, childs: [", i, block->instruction_count);
+        for (int j = 0; j < block->child_count; j++)
+        {
+            printf("%d", block->childs[j]->index);
+            if (j + 1 < block->child_count)
+                printf(", ");
+        }
+        printf("]):\n");
+
+        for (int j = 0; j < block->instruction_count; j++)
+        {
+            IR_Instruction *e = &block->instructions[j];
+
+            printf("\t\t");
+            print_instruction(c, e, 1);
+        }
     }
 #endif
 #endif

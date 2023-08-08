@@ -83,6 +83,7 @@ struct Node
     Node    *next_stmt;
     Node    *else_node;
     Node    *decl;
+	Node	*next_func;
 };
 
 typedef struct Scope Scope;
@@ -143,6 +144,17 @@ typedef struct
     int r2_imm;
 } IR_Instruction;
 
+typedef struct Control_Flow_Graph Control_Flow_Graph;
+
+typedef struct
+{
+	char				*name;
+	int					first_instruction;
+	int					instruction_count;
+	int					label;
+	Control_Flow_Graph *cfg;
+} Function;
+
 typedef struct
 {
     IR_Instruction  *instructions;
@@ -150,13 +162,10 @@ typedef struct
     int             curr_reg;
     int             *labels;
     int             label_count;
-    char            *label_function_name[256];
-    struct
-    {
-        char *name;
-        int label;
-    }               functions_labels[256];
-    int             function_count;
+
+	Function		*functions;
+	int				function_count;
+
     struct
     {
         Node *decl;
@@ -175,11 +184,11 @@ struct IR_Basic_Block
     int             index;
 };
 
-typedef struct
+struct Control_Flow_Graph
 {
     IR_Basic_Block  blocks[32];
     int             block_count;
-} Control_Flow_Graph;
+};
 
 void error_token(Token *token, char *fmt, ...);
 

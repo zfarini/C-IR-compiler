@@ -1,13 +1,13 @@
 fn func()
 {
-    print 42
+	print 42
 }
 
 fn main()
 {
     int i
     i = 0
-    while (i < 10)
+    while (i < 5)
     {
         func()
         i = i + 1
