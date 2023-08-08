@@ -83,9 +83,22 @@ int main(void)
     print_ir_code(c);
     sim_ir_code(c);
 
- //   Control_Flow_Graph *g = gen_control_flow_graph(c);
+   // int ip = 0;
+   // for (int i = 0; i < c->function_count; i++)
+   // {
+   //     IR_Code t = *c;
 
- //   IR_Code *final = cfg_to_ir_code(g);
- //   print_ir_code(final);
- //   sim_ir_code(final);
+   //     int end = ip;
+   //     while (1)
+   //     {
+   //         for (int j = 0; j < c->label_count; j++)
+   //             
+   //      
+   //     Control_Flow_Graph *g = gen_control_flow_graph(&t);
+   // }
+
+    Control_Flow_Graph *g = gen_control_flow_graph(c);
+    IR_Code *final = cfg_to_ir_code(g);
+    print_ir_code(final);
+  //  sim_ir_code(final);
 }

@@ -150,6 +150,13 @@ typedef struct
     int             curr_reg;
     int             *labels;
     int             label_count;
+    char            *label_function_name[256];
+    struct
+    {
+        char *name;
+        int label;
+    }               functions_labels[256];
+    int             function_count;
     struct
     {
         Node *decl;
@@ -163,7 +170,6 @@ struct IR_Basic_Block
 {
     IR_Instruction  instructions[512];
     int             instruction_count;
-    int             first_instruction;
     IR_Basic_Block  *childs[2];
     int             child_count;
     int             index;

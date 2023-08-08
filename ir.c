@@ -80,13 +80,6 @@ int token_type_to_ir_op(int type)
         assert(0);
 }
 
-struct
-{
-    char *name;
-    int label;
-} function_labels[256];
-int function_label_count = 0;
-
 int gen_ir(IR_Code *c, Node *node)
 {
     int reg = -1;
@@ -111,10 +104,11 @@ int gen_ir(IR_Code *c, Node *node)
     else if (node->type == NODE_FUNC_DEF)
     {
         c->labels[c->label_count] = c->instruction_count;
-        function_labels[function_label_count].name = node->token->name;
-        function_labels[function_label_count].label = c->label_count;
+        c->functions_labels[c->function_count].name = node->token->name;
+        c->functions_labels[c->function_count].label = c->label_count;
+        c->label_function_name[c->label_count] = node->token->name;
         c->label_count++;
-        function_label_count++;
+        c->function_count++;
         gen_ir(c, node->body);
         add_instruction(c, OP_RET);
     }
@@ -123,9 +117,9 @@ int gen_ir(IR_Code *c, Node *node)
         IR_Instruction *e = add_instruction(c, OP_CALL);
 
         int label = -1;
-        for (int i = 0; i < function_label_count; i++)
-            if (!strcmp(node->token->name, function_labels[i].name))
-                label = function_labels[i].label;
+        for (int i = 0; i < c->function_count; i++)
+            if (!strcmp(node->token->name, c->functions_labels[i].name))
+                label = c->functions_labels[i].label;
         assert(label != -1);
         e->r0 = label;
     }
@@ -267,9 +261,9 @@ void sim_ir_code(IR_Code *c)
 
 
     int start = -1;
-    for (int i = 0; i < function_label_count; i++)
-        if (!strcmp(function_labels[i].name, "main"))
-            start = c->labels[function_labels[i].label];
+    for (int i = 0; i < c->function_count; i++)
+        if (!strcmp(c->functions_labels[i].name, "main"))
+            start = c->labels[c->functions_labels[i].label];
     if (start == -1)
     {
         printf("SIM ERROR: main is not defined\n");
@@ -333,7 +327,7 @@ void sim_ir_code(IR_Code *c)
     }
 }
 
-void print_instruction(IR_Instruction *e, int in_block)
+void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
 {
     if (e->op == OP_JMP)
         printf("jmp %s%d", (in_block ? "B" : "L"), e->r0);
@@ -342,7 +336,7 @@ void print_instruction(IR_Instruction *e, int in_block)
     else if (e->op == OP_PRINT)
         printf("print %s%d", e->r1_imm ? "" : "t", e->r1);
     else if (e->op == OP_CALL)
-        printf("call L%d", e->r0);
+        printf("call %s", c->label_function_name[e->r0]);
     else if (e->op == OP_RET)
         printf("ret");
     else
@@ -371,11 +365,16 @@ void print_ir_code(IR_Code *c)
         for (int j = 0; j < c->label_count; j++)
         {
             if (c->labels[j] == i)
-                printf("\tL%d:\n", j);
+            {
+                if (c->label_function_name[j])
+                    printf("\t%s:\n", c->label_function_name[j]);
+                else
+                    printf("\tL%d:\n", j);
+            }
         }
 
         printf("%-16d", i);
-        print_instruction(e, 0);
+        print_instruction(c, e, 0);
     }
 
     for (int j = 0; j < c->label_count; j++)
@@ -619,12 +618,12 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
         }
 
         if (i && (label_here || c->instructions[i - 1].op == OP_JMP ||
-            c->instructions[i - 1].op == OP_JMPZ))
+            c->instructions[i - 1].op == OP_JMPZ ||
+            c->instructions[i - 1].op == OP_RET))
         {
             assert(g->block_count < array_length(g->blocks));
             curr_block = &g->blocks[g->block_count];
             curr_block->index = g->block_count;
-            curr_block->first_instruction = i;
             g->block_count++;
         }
 
@@ -693,7 +692,7 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
             IR_Instruction *e = &block->instructions[j];
 
             printf("\t\t");
-            print_instruction(e, 1);
+            print_instruction(c, e, 1);
         }
     }
 
@@ -720,7 +719,7 @@ Control_Flow_Graph *gen_control_flow_graph(IR_Code *c)
             IR_Instruction *e = &block->instructions[j];
 
             printf("\t\t");
-            print_instruction(e, 1);
+            print_instruction(c, e, 1);
         }
     }
 #if 1
