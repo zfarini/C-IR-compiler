@@ -118,7 +118,6 @@ int main(void)
 
     print_ir_code(c);
 	
-	
     sim_ir_code(c);
 	
 	for (int i = 0; i < c->function_count; i++)

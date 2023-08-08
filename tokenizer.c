@@ -37,6 +37,7 @@ Token *tokenize(char *s)
         {"else",        TOKEN_ELSE},
         {"fn",          TOKEN_FN},
         {"int",         TOKEN_INT},
+		{"return",		TOKEN_RETURN},
     };
 
     struct

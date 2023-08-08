@@ -121,6 +121,12 @@ Node *parse_statement(Parser *p)
         p->curr_scope->decl_count++;
         skip_token(p);
     }
+	else if (get_curr_token(p)->type == TOKEN_RETURN)
+	{
+		node = make_node(p, NODE_RETURN);
+		skip_token(p);
+		node->left = parse_expr(p, 0);
+	}
     else if (get_curr_token(p)->type == TOKEN_WHILE)
     {
         node = make_node(p, NODE_WHILE);

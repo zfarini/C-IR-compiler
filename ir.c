@@ -89,7 +89,6 @@ Function *find_function(IR_Code *c, char *name)
 	return 0;
 }
 
-
 int gen_ir(IR_Code *c, Node *node)
 {
     int reg = -1;
@@ -111,6 +110,14 @@ int gen_ir(IR_Code *c, Node *node)
         assert(reg >= 0);
 
     }
+	else if (node->type == NODE_RETURN)
+	{
+		int r = gen_ir(c, node->left);
+		IR_Instruction *e = add_instruction(c, OP_MOV);
+		e->r0 = 0;
+		e->r1 = r;
+		add_instruction(c, OP_RET);
+	}
     else if (node->type == NODE_FUNC_DEF)
     {
 		Function *f = find_function(c, node->token->name);
@@ -132,6 +139,12 @@ int gen_ir(IR_Code *c, Node *node)
 		assert(f);
 
 		e->r0 = f->label;
+
+		e = add_instruction(c, OP_MOV);
+		e->r0 = c->curr_reg++;
+		e->r1 = 0;
+
+		reg = e->r0;
     }
     else if (node->type == NODE_PRINT)
     {
@@ -218,6 +231,7 @@ IR_Code *gen_ir_code(Node *node)
 {
     IR_Code *c = calloc(1, sizeof(*c));
 
+	c->curr_reg = 1;
     c->instructions = calloc(sizeof(*c->instructions), 16384);
     c->labels = calloc(sizeof(*c->labels), 256);
 	c->functions = calloc(sizeof(*c->functions), 64);
@@ -276,7 +290,7 @@ int eval_op(int op, int r1, int r2)
 
 void sim_ir_code(IR_Code *c)
 {
-    int regs[128] = {};
+    int regs[128] = {0};
     int ip = 0;
 
     fflush(stderr); // ??
@@ -331,7 +345,7 @@ void sim_ir_code(IR_Code *c)
                 return ;
             }
             call_stack[call_stack_depth++] = ip + 1;
-            ip = e->r0;
+            ip = c->labels[e->r0];
             continue ;
         }
         else if (e->op == OP_RET)
@@ -376,7 +390,7 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
 
 void print_ir_code(IR_Code *c)
 {
-    printf("\033[1;32mgenerated ir:\033[0m\n");
+    printf("\033[1;32mgenerated ir:\033[0m (%d instructions)\n", c->instruction_count);
 
     for (int i = 0; i < c->instruction_count; i++)
     {
@@ -411,6 +425,7 @@ enum
     VALUE_CONST,
     VALUE_REGISTER,
     VALUE_OP,
+	VALUE_FUNC_CALL,
 };
 
 typedef struct
@@ -503,7 +518,15 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
     {
         IR_Instruction *e = &b->instructions[i];
 
-        if (e->op == OP_MOV || e->op == OP_PRINT)
+		if (e->op == OP_CALL)
+		{
+			Value v = {0};
+			v.type = VALUE_FUNC_CALL;
+			v.v1 = i; // just to avoid matching with another function call
+			values[s->value_count++] = v;
+			assign_register_to_value(s, 0, s->value_count - 1);
+		}
+		else if (e->op == OP_MOV || e->op == OP_PRINT)
         {
             Value v = {0};
             v.type = (e->r1_imm ? VALUE_CONST : VALUE_REGISTER);
@@ -632,6 +655,8 @@ void local_value_numbering_for_basic_block(IR_Basic_Block *b)
             printf("t%d", v->v1);
         else if (v->type == VALUE_OP)
             printf("#%d %s #%d", v->v1, get_ir_op_str(v->op), v->v2);
+		else if (v->type == VALUE_FUNC_CALL)
+			printf("call ??");
         else
             assert(0);
         printf("\n");
@@ -766,6 +791,7 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
     {
 
         int register_used[256] = {0};
+		register_used[0] = 100;
         for (int i = 0; i < g->block_count; i++)
         {
             for (int j = 0; j < g->blocks[i].instruction_count; j++)
@@ -777,6 +803,7 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
                      register_used[e->r1]++;
                  if (e->op < OP_BINARY && !e->r2_imm)
                      register_used[e->r2]++;
+
             }
         }
 

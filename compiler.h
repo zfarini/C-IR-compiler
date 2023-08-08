@@ -31,6 +31,7 @@ typedef enum
     TOKEN_BINARY_END,
 
     TOKEN_WHILE,
+	TOKEN_RETURN,
     TOKEN_IF,
     TOKEN_ELSE,
     TOKEN_INT,
@@ -67,6 +68,7 @@ enum NodeType
     NODE_IF,
     NODE_PRINT,
     NODE_VAR_DECL,
+	NODE_RETURN,
 };
 
 struct Node

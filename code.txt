@@ -1,17 +1,16 @@
-fn func()
+fn func1()
 {
-	print 42
+	return 10
+}
+
+fn func2()
+{
+	return func1() * 2
 }
 
 fn main()
 {
-    int i
-    i = 0
-    while (i < 5)
-    {
-        func()
-        i = i + 1
-    }
+	print func1() + func2()
 }
 
 
