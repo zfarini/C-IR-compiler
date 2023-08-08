@@ -1,9 +1,9 @@
-fn fib(int n)
+fn fib(int n, int m)
 {
 	if (n <= 1)
 		return n
 
-	return fib(n - 1) + fib(n - 2)
+	return fib(n - 1, m) + fib(n - 2, m) + m
 }
 
 fn add(int a, int b)
@@ -14,15 +14,5 @@ fn add(int a, int b)
 // 0 1 1 2 3 5
 fn main()
 {
-	print fib(fib(fib(2) + fib(3 + fib(2))) + fib(fib(4)))
+	print fib(fib(5, 3), fib(3, 1) + fib(2, 2)) + fib(fib(fib(2, 3), 4), fib(fib(1, 1), 1))
 }
-
-
-//double:
-//	t0 = t1 * 2
-//	ret
-//main:
-//	t1 = 5
-//	call double
-//	print t0
-

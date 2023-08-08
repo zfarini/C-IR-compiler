@@ -430,7 +430,7 @@ void sim_ir_code(IR_Code *c)
 				printf("SIM ERROR: stack overflow\n");
 				return ;
 			}
-			stack[stack_top++] = regs[e->r1];
+			stack[stack_top++] = r1_value;
 		}
 		else if (e->op == OP_POP)
 		{
@@ -661,7 +661,7 @@ void local_value_numbering_for_basic_block(IR_Code *c, IR_Basic_Block *b)
             if (!e->r1_imm)
                 assert(value_owner[j] != -1);
 
-            if (e->op != OP_PRINT)
+            if (e->op == OP_MOV)
                 assign_register_to_value(s, e->r0, j);
 
             if (values[j].type == VALUE_CONST)
@@ -882,7 +882,7 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
 #endif
     }
 
-#if 1
+#if 0
 	printf("\033[4;33mfunction %s:\033[0m\n", f->name);
     printf("\033[1;34mbasic blocks:\033[0m\n");
     for (int i = 0; i < g->block_count; i++)
@@ -923,8 +923,13 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
 
 		memset(register_used, 1, c->reserved_reg * sizeof(int)); // have a big value for the reserved regs
 
+
+        int old_count = 0;
+
         for (int i = 0; i < g->block_count; i++)
         {
+			old_count += g->blocks[i].instruction_count;
+
             for (int j = 0; j < g->blocks[i].instruction_count; j++)
             {
                 IR_Instruction *e = &g->blocks[i].instructions[j];
@@ -938,7 +943,7 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
             }
         }
 
-        int end = 1;
+
 
         for (int i = 0; i < g->block_count; i++)
         {
@@ -949,31 +954,38 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
                 int remove = 0;
                 // this is a block optimization for now, I'm not sure if can extended it to global
                 // it happens when a register is used once to store an op and then moved to another
+#if 1
 				if ((e->op == OP_MOV || e->op < OP_BINARY) && register_used[e->r0] == 1)
                 {
                     for (int k = j + 1; k < g->blocks[i].instruction_count; k++)
                     {
                         IR_Instruction *f = &g->blocks[i].instructions[k];
 
+						if (f->op == OP_CALL)
+							break ;
                         if (f->op == OP_MOV && !f->r1_imm && f->r1 == e->r0)
                         {
                             int r = f->r0;
 
-                            *f = *e;
-                            f->r0 = r;
+                           	*f = *e;
+                           	f->r0 = r;
                             remove = 1;
                         }
                             
                     }
                 }
+#endif
+#if 1
                 if (remove || (((e->op == OP_MOV || e->op < OP_BINARY) && !register_used[e->r0])
-                    || (e->op == OP_MOV && !e->r1_imm && e->r0 == e->r1)) ||
-						(e->op == OP_POP && !register_used[e->r1]))
+                    || (e->op == OP_MOV && !e->r1_imm && e->r0 == e->r1))
+					|| (e->op == OP_POP && !register_used[e->r1]))
+						
                 {
 					int op = e->op;
 					remove_instruction(&g->blocks[i], j);
 
 
+#if 1
 					if (op == OP_POP)
 					{
 
@@ -985,9 +997,11 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
 
 						remove_instruction(&g->blocks[i], k);
 					}
+#endif
 					j--;
-                    end = 0;
                 }
+#endif
+#if 1
 				else if (e->op == OP_PUSH)
 				{
 					int k = j + 1;
@@ -1008,12 +1022,17 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
 						j--;
 					}
 				}
+#endif
             }
         }
-        if (end)
+		int new_count = 0;
+		for (int i = 0; i < g->block_count; i++)
+			new_count += g->blocks[i].instruction_count;
+
+        if (new_count == old_count)
             break ;
     }
-#if 1
+#if 0
     printf("\033[1;32moptimized blocks:\033[0m\n");
 
     for (int i = 0; i < g->block_count; i++)
