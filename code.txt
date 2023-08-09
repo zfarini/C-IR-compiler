@@ -1,29 +1,13 @@
-fn inc(int *a)
-{
-	*a = *a + 1;
-}
-
-fn swap(int *a, int *b)
-{
-	int t;
-	t = *a;
-	*a = *b;
-	*b = t;
-}
-
 fn main()
 {
 	int a;
-	int b;
-
-	a = 3;
-	b = 5;
-
-	swap(&a, &b);
-	print a;
-	print b;
-	assert a == 5;
-	assert b == 3;
+	int *b;
+	int **c;
+	
+	a = 5;
+	print &(*a);
+	//*(&b + 4) = 5;
+	//print *(&b + 4);
 }
 
 //fn add(int *a)

@@ -1,5 +1,3 @@
-#include "compiler.h"
-
 /*
     we propably need to deal with '\r' ?
     DON'T try to optimize / simply code until we write the preprocessor
@@ -7,8 +5,6 @@
     we can get away with generating a token on demand from parser
     instead of generate all at once but do we really care?
 */
-
-char *find_char_in_str(char *s, char c);
 
 void error_token(Token *token, char *fmt, ...)
 {

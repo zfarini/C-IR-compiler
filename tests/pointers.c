@@ -51,6 +51,18 @@ fn main()
 		assert *c == &a;
 		*c = &d;
 		assert b == &d;
+		assert **c == d;
+		**c = 10;
+		assert *b == d;
+		assert **c == d;
+		assert d == 10;
+
+		c = 0;
+		assert &(*c) == 0;
+		assert *(&a) == a;
+		assert *(&a + 4) == b;
+		b = &a;
+		assert **(&a + 4) == a;
 	}
 }
 

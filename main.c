@@ -14,7 +14,10 @@ char *find_char_in_str(char *s, char c)
 
 #include "tokenizer.c"
 #include "parser.c"
-#include "ir.c"
+#include "gen_ir.c"
+#include "sim_ir.c"
+#include "print_ir.c"
+#include "optimize_ir.c"
 
 char *load_entire_file(char *filename)
 {

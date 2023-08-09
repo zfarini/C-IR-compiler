@@ -1,4 +1,46 @@
-#include "compiler.h"
+int is_bin_op(int type)
+{
+    return (find_char_in_str("+-*/%=<>", type) ||
+        (type > TOKEN_BINARY_BEGIN && type < TOKEN_BINARY_END));
+}
+
+int is_node_lvalue(Node *node)
+{
+	return node->type == NODE_VAR ||
+			node->type == NODE_DEREF;
+}
+
+char *token_type_to_str(int type)
+{
+	char *typenames[] = {
+		[0] = "end of file",
+		[TOKEN_NUMBER] = "number",
+		[TOKEN_IDENTIFIER] = "identifier",
+		[TOKEN_LOGICAL_AND] = "&&",
+		[TOKEN_LOGICAL_OR] = "||",
+		[TOKEN_EQUAL] = "==",
+		[TOKEN_NOT_EQUAL] = "!=",
+		[TOKEN_LESS_OR_EQUAL] = "<=",
+		[TOKEN_GREATER_OR_EQUAL] = ">=",
+		[TOKEN_WHILE] = "while",
+		[TOKEN_RETURN] = "return",
+		[TOKEN_IF] = "if",
+		[TOKEN_ELSE] = "else",
+		[TOKEN_INT] = "int",
+		[TOKEN_FN] = "fn",
+		[TOKEN_UNKNOWN] = "unkown",
+	};
+	static char s[256][2]; // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
+
+	assert(type < TOKEN_MAX);
+	if (!typenames[type])
+	{
+		s[type][0] = type;
+		s[type][1] = 0;
+		return s[type];
+	}
+	return typenames[type];
+}
 
 Node *make_node(Parser *p, int type)
 {
@@ -42,8 +84,12 @@ Token *expect_token(Parser *p, int type)
 	Token *token = &p->tokens[p->curr_token];
 
 	if (token->type != type)
-		error_token(token, "unexpected token"); // use type
-	p->curr_token++;
+	{
+		error_token(token, "expected token `%s` but found `%s`", 
+					token_type_to_str(type),
+					token_type_to_str(token->type));
+	}
+		p->curr_token++;
 	return token;
 }
 
@@ -323,10 +369,7 @@ Node *parse_atom(Parser *p)
     {
         skip_token(p);
         node = parse_expr(p, 0);
-        if (get_curr_token(p)->type != ')')
-            error_token(get_curr_token(p), "expected ')'");
-        else
-            skip_token(p);
+		expect_token(p, ')');
     }
 	else if (token->type == '*')
 	{
@@ -339,6 +382,8 @@ Node *parse_atom(Parser *p)
 		node = make_node(p, NODE_ADDR);
 		skip_token(p);
 		node->left = parse_atom(p);
+		if (!is_node_lvalue(node->left))
+			error_token(node->left->token, "expected an lvalue");
 	}
     else if (token->type == '+')
     {
@@ -366,13 +411,6 @@ Node *parse_atom(Parser *p)
     return (node);
 }
 
-char *find_char_in_str(char *s, char c);
-
-int is_bin_op(int type)
-{
-    return (find_char_in_str("+-*/%=<>", type) ||
-        (type > TOKEN_BINARY_BEGIN && type < TOKEN_BINARY_END));
-}
 
 /*
     ref: https://eli.thegreenplace.net/2012/08/02/parsing-expressions-by-precedence-climbing
@@ -430,6 +468,9 @@ Node *parse_expr(Parser *p, int min_prec)
         node->left = res;
         skip_token(p);
         node->right = parse_expr(p, next_prec);
+
+		if (node->token->type == '=' && !is_node_lvalue(node->left))
+			error_token(node->left->token, "expected an lvalue");
         res = node;
     }
 

@@ -1,0 +1,3 @@
+cleanup code
+add types (to ast and ir)
+add arrays + string
