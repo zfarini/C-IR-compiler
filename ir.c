@@ -60,6 +60,7 @@ IR_Instruction *add_instruction(IR_Code *c, int op)
 
     e->op = op;
     c->instruction_count++;
+	e->node = c->curr_node;
 
     return e;
 }
@@ -93,6 +94,7 @@ int gen_ir(IR_Code *c, Node *node)
 {
     int reg = -1;
 
+	c->curr_node = node;
     if (node->type == NODE_NUMBER)
     {
         IR_Instruction  *e = add_instruction(c, OP_MOV);
@@ -156,8 +158,8 @@ int gen_ir(IR_Code *c, Node *node)
 
 		Function *f = find_function(c, node->token->name);
 
-		f->stack_size = 0;
-	//	f->stack_size = f->decl->total_vars * sizeof(int);
+		f->stack_size = node->arg_count * sizeof(int);
+		
 
 		c->curr_func = f;
 		assert(f);
@@ -165,14 +167,6 @@ int gen_ir(IR_Code *c, Node *node)
 		c->labels[f->label] = c->instruction_count;
 		f->first_instruction = c->instruction_count;
 
-		Node *arg = node->first_arg;
-		int	i = 0;
-		while (arg)
-		{
-			set_var_register(c, arg, REG_ARG0 + i);
-			arg = arg->next_arg;
-			i++;
-		}
 		{
 			IR_Instruction *e = add_instruction(c, OP_ADD);
 			e->r0 = REG_SP;
@@ -180,6 +174,22 @@ int gen_ir(IR_Code *c, Node *node)
 			e->r2_imm = 1;
 			// e->r2 will be updated later
 		}
+
+		Node *arg = node->first_arg;
+		int	i = 0;
+		while (arg)
+		{
+			set_var_register(c, arg, REG_ARG0 + i);
+			arg->stack_offset = i * sizeof(int);
+			IR_Instruction *e = add_instruction(c, OP_STORE);
+			e->r1 = arg->stack_offset;
+			e->r1_imm = 1;
+			e->r2 = REG_ARG0 + i;
+
+			arg = arg->next_arg;
+			i++;
+		}
+
 
         gen_ir(c, node->body);
 		// add return label
@@ -261,6 +271,7 @@ int gen_ir(IR_Code *c, Node *node)
 
         IR_Instruction *e = add_instruction(c, OP_CALL);
 
+	
 		Function *f = find_function(c, node->token->name);
 
 		// reload my arguments
@@ -274,7 +285,8 @@ int gen_ir(IR_Code *c, Node *node)
 			i++;
 		}
 
-		assert(f);
+		if (!f) // shouldn't be here
+			error_token(node->token, "undeclared function");
 
 		e->r0 = f->label;
 
@@ -291,6 +303,13 @@ int gen_ir(IR_Code *c, Node *node)
         IR_Instruction *e = add_instruction(c, OP_PRINT);
         e->r1 = r;
     }
+	else if (node->type == NODE_ASSERT)
+	{
+        int r = gen_ir(c, node->left);
+
+        IR_Instruction *e = add_instruction(c, OP_ASSERT);
+        e->r1 = r;
+	}
     else if (node->type == NODE_BINOP && node->op == '=')
     {
         int r1 = gen_ir(c, node->right);
@@ -394,6 +413,15 @@ int gen_ir(IR_Code *c, Node *node)
             curr = curr->next_stmt;
         }
     }
+	else if (node->type == '!')
+	{
+		int r = gen_ir(c, node->left);
+
+		IR_Instruction *e = add_instruction(c, OP_NOT);
+		e->r0 = c->curr_reg++;
+		e->r1 = r;
+		reg = e->r0;
+	}
     else if (node->type == NODE_VAR_DECL)
     {
 		node->stack_offset = c->curr_func->stack_size;
@@ -507,17 +535,16 @@ int eval_op(int op, int r1, int r2)
 
 int	*get_int_from_stack(uint8_t *stack, int offset)
 {
-	assert(offset >= 0);
-	assert(offset % 4 == 0);
+	if (offset < 0 || offset % 4)
+		return (0);
 	return (int *)(stack + offset);
 }
 
-void sim_ir_code(IR_Code *c)
+int	sim_ir_code(IR_Code *c)
 {
-    int regs[128] = {0};
+    int regs[1024] = {0};
     int ip = 0;
 
-    fflush(stderr); // ??
     printf("\033[1;32msim output:\033[0m\n");
 
 
@@ -526,8 +553,10 @@ void sim_ir_code(IR_Code *c)
     if (!main)
     {
         printf("SIM ERROR: main is not defined\n");
-        return ;
+        return 1;
     }
+
+	int err = 0;
 
     ip = main->first_instruction;
 	int stack_max = 4096;
@@ -546,6 +575,8 @@ void sim_ir_code(IR_Code *c)
             regs[e->r0] = eval_op(e->op, r1_value, r2_value);
         else if (e->op == OP_MOV)
             regs[e->r0] = r1_value;
+		else if (e->op == OP_NOT)
+			regs[e->r0] = !r1_value;
         else if (e->op == OP_JMP)
         {
             ip = c->labels[e->r0];
@@ -563,12 +594,22 @@ void sim_ir_code(IR_Code *c)
         {
             printf("%d\n", r1_value);
         }
+		else if (e->op == OP_ASSERT)
+		{
+			if (!r1_value)
+			{
+				printf("SIM ERROR: line %d: assert failed (value = %d)\n", (!e->node || !e->node->token ? -1 : e->node->token->line), r1_value);
+				err = 1;
+				break ;
+			}
+		}
         else if (e->op == OP_CALL)
         {
 			if (regs[REG_SP] == stack_max)
 			{
 				printf("SIM ERROR: stack overflow\n");
-				return ;
+				err = 1;
+				break ;
 			}
 			*get_int_from_stack(stack, regs[REG_SP]) = ip + 1;
 			regs[REG_SP] += sizeof(int);
@@ -595,9 +636,14 @@ void sim_ir_code(IR_Code *c)
 		}
 		else
             assert(0);
+		//printf("IP: %d, ", ip);
+		//for (int j = 0; j < 8; j++)
+		//	printf("t%d = %d, ", j, regs[j]);
+		//printf("\n");
         ip++;
     }
 	free(stack);
+	return err;
 }
 
 void int_to_str(char *s, int x)
@@ -655,10 +701,14 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
         printf("jmpz %s%d %s", (in_block ? "B" : "L"), e->r0, r1);
     else if (e->op == OP_PRINT)
         printf("print %s", r1);
+	else if (e->op == OP_ASSERT)
+		printf("assert %s", r1);
     else if (e->op == OP_CALL)
         printf("call %s", c->functions[in_block ? -e->r0 : e->r0].name);
     else if (e->op == OP_RET)
         printf("ret");
+	else if (e->op == OP_NOT)
+		printf("%s = !%s", r0, r1);
 	else if (e->op == OP_STORE)
 	{
 		if (e->r1_imm)
@@ -830,7 +880,7 @@ void local_value_numbering_for_basic_block(IR_Code *c, IR_Basic_Block *b)
 			}
 
 		}
-		else if (e->op == OP_MOV || e->op == OP_PRINT)
+		else if (e->op == OP_MOV || e->op == OP_PRINT || e->op == OP_ASSERT)
         {
 
             Value v = {0};

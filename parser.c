@@ -243,9 +243,18 @@ Node *parse_statement(Parser *p)
         leave_scope(p);
     }
     else if (get_curr_token(p)->type == TOKEN_IDENTIFIER &&
-             !strcmp(get_curr_token(p)->name, "print"))
+             (!strcmp(get_curr_token(p)->name, "print")))
     {
         node = make_node(p, NODE_PRINT);
+        skip_token(p);
+
+        node->left = parse_expr(p, 0);
+		expect_token(p, ';');
+    }
+    else if (get_curr_token(p)->type == TOKEN_IDENTIFIER &&
+             (!strcmp(get_curr_token(p)->name, "assert")))
+    {
+        node = make_node(p, NODE_ASSERT);
         skip_token(p);
 
         node->left = parse_expr(p, 0);
@@ -345,6 +354,12 @@ Node *parse_atom(Parser *p)
         node->left->value = 0;
         node->right = parse_atom(p);
     }
+	else if (token->type == '!')
+	{
+		node = make_node(p, '!');
+		skip_token(p);
+		node->left = parse_atom(p);
+	}
     else
         error_token(get_curr_token(p), "expected an expression");
 

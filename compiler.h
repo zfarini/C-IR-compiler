@@ -57,7 +57,8 @@ typedef struct Node Node;
 
 enum NodeType
 {
-    NODE_FUNC_DEF,
+	
+    NODE_FUNC_DEF = 256,
     NODE_FUNC_CALL,
     NODE_NUMBER,
     NODE_VAR,
@@ -67,6 +68,7 @@ enum NodeType
     NODE_BLOCK,
     NODE_IF,
     NODE_PRINT,
+	NODE_ASSERT,
     NODE_VAR_DECL,
 	NODE_RETURN,
 	NODE_DEREF,
@@ -145,7 +147,7 @@ enum
     OP_MOD          = '%',
     OP_LESS         = '<',
     OP_GREATER      = '>',
-    OP_NOT          = '!',
+
 
     OP_EQUAL = 256,
     OP_LESS_OR_EQUAL,
@@ -153,6 +155,8 @@ enum
     OP_NOT_EQUAL,
     
     OP_BINARY,
+
+    OP_NOT,
 
     OP_MOV,
 
@@ -163,6 +167,7 @@ enum
     OP_RET,
 	OP_LOAD,
 	OP_STORE,
+	OP_ASSERT,
 };
 
 enum
@@ -181,6 +186,7 @@ typedef struct
     int r2;
     int r1_imm;
     int r2_imm;
+	Node	*node;
 } IR_Instruction;
 
 typedef struct Control_Flow_Graph Control_Flow_Graph;
@@ -208,6 +214,8 @@ typedef struct
 	Function		*functions;
 	int				function_count;
 	Function		*curr_func;
+
+	Node			*curr_node;
 
     struct
     {

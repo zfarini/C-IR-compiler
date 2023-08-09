@@ -1,4 +1,5 @@
 #include "compiler.h"
+#include <dirent.h>
 
 char *find_char_in_str(char *s, char c)
 {
@@ -98,9 +99,66 @@ IR_Code *cfg_to_ir_code(IR_Code *c)
 }
 #endif
 
-int main(void)
+int main(int argc, char **argv)
 {
-    char *s = load_entire_file("code.txt");
+	char	*filename = "code.txt";
+
+	if (argc > 1 && !strcmp(argv[1], "-t"))
+	{
+		char *test_dir = "tests";
+		int test_dir_len = strlen(test_dir);
+
+		DIR *d = opendir(test_dir);
+
+		struct dirent *file;
+		int failed_count = 0;
+		int total = 0;
+
+		while ((file = readdir(d)))
+		{
+			if (file->d_name[0] == '.')
+				continue ;
+			char path[256] = {0};
+			memcpy(path, test_dir, test_dir_len);
+			path[test_dir_len] = '/';
+			memcpy(path + test_dir_len + 1, file->d_name, strlen(file->d_name));
+			
+
+			int pid = fork();
+			if (!pid)
+			{
+				char *s = load_entire_file(path);
+				close(1);
+				close(2);
+				Token *tokens = tokenize(s);	
+				Node *node = parse(tokens);
+				IR_Code *c = gen_ir_code(node);
+
+				int status = sim_ir_code(c);
+				exit(status);
+			}
+			int status;
+			waitpid(pid, &status, 0);
+			if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
+				printf("%s: \033[1;32mOK\033[0m\n", path);
+			else
+			{
+				printf("%s: \033[1;31mFAILED\033[0m\n", path);
+				failed_count++;
+			}
+			total++;
+		}
+		if (failed_count)
+			printf("\033[1;31mFAILED\033[0m %d tests out of %d\n", failed_count, total);
+		else
+			printf("\033[1;32mOK\033[0m\n");
+
+		return 0;
+	}
+	else if (argc > 1)
+		filename = argv[1];
+
+    char *s = load_entire_file(filename);
     Token *tokens = tokenize(s);
 
 #if 0
