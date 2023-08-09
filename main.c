@@ -122,13 +122,13 @@ int main(void)
 	
     sim_ir_code(c);
 	
-	for (int i = 0; i < c->function_count; i++)
-		c->functions[i].cfg = gen_function_control_flow_graph(c, &c->functions[i]);
+	//for (int i = 0; i < c->function_count; i++)
+	//	c->functions[i].cfg = gen_function_control_flow_graph(c, &c->functions[i]);
 
-	IR_Code *final = cfg_to_ir_code(c);
+	//IR_Code *final = cfg_to_ir_code(c);
 
-	print_ir_code(final);
+	//print_ir_code(final);
 
-	sim_ir_code(final);
+	//sim_ir_code(final);
 
 }

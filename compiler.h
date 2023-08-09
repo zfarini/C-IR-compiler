@@ -69,6 +69,22 @@ enum NodeType
     NODE_PRINT,
     NODE_VAR_DECL,
 	NODE_RETURN,
+	NODE_DEREF,
+	NODE_ADDR,
+};
+
+typedef struct Type Type;
+
+enum
+{
+	TYPE_PTR,
+	TYPE_INT,
+};
+
+struct Type
+{
+	int t;
+	Type *ptr_to;
 };
 
 struct Node
@@ -90,6 +106,9 @@ struct Node
 	Node	*first_arg;
 	Node	*next_arg;
 	int		arg_count;
+	Type	*t;
+	int		total_vars;
+	int		stack_offset;
 };
 
 typedef struct Scope Scope;
@@ -111,6 +130,10 @@ typedef struct
     Scope   *curr_scope;
     Scope   *scopes;
     int     scope_count;
+
+	Type	*types;
+	int first_free_type;
+	Node	*curr_func;
 } Parser;
 
 enum
@@ -138,8 +161,16 @@ enum
     OP_PRINT,
     OP_CALL,
     OP_RET,
-	OP_PUSH,
-	OP_POP,
+	OP_LOAD,
+	OP_STORE,
+};
+
+enum
+{
+	REG_RT,
+	REG_SP,
+	REG_COUNT,
+	REG_ARG0 = REG_COUNT,
 };
 
 typedef struct
@@ -161,6 +192,7 @@ typedef struct
 	int					first_instruction;
 	int					instruction_count;
 	int					label;
+	int					stack_size;
 	Control_Flow_Graph *cfg;
 } Function;
 

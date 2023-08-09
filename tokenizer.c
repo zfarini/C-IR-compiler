@@ -54,7 +54,7 @@ Token *tokenize(char *s)
         {"||",      TOKEN_LOGICAL_OR},
     };
 
-	char	*single_char_tokens = "+-*/%<>()=;{}!,";
+	char	*single_char_tokens = "+-*/%<>()=;{}!,&";
 
     int max_token_count = (int)strlen(s) + 1;
     Token   *tokens = calloc(sizeof(Token), max_token_count);
@@ -148,7 +148,7 @@ Token *tokenize(char *s)
 
         token->c1 = i;
         j++;
-        col++;
+        col += token->c1 - token->c0;
     }
     
     assert(j < max_token_count);

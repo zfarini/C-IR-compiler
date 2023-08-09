@@ -1,18 +1,39 @@
-fn fib(int n, int m)
+fn inc(int *a)
 {
-	if (n <= 1)
-		return n
-
-	return fib(n - 1, m) + fib(n - 2, m) + m
+	*a = *a + 1;
 }
 
-fn add(int a, int b)
+fn swap(int *a, int *b)
 {
-	return a + b
+	int t;
+	t = *a;
+	*a = *b;
+	*b = t;
 }
 
-// 0 1 1 2 3 5
 fn main()
 {
-	print fib(fib(5, 3), fib(3, 1) + fib(2, 2)) + fib(fib(fib(2, 3), 4), fib(fib(1, 1), 1))
+	int a;
+	int b;
+
+	a = 3;
+	b = 5;
+
+	swap(&a, &b);
+	print a;
+	print b;
 }
+
+//fn add(int *a)
+//{
+//	*a = *a + 1
+//}
+//
+//fn main()
+//{
+//	int a
+//	
+//	a = 2
+//	add(&a)
+//	print a
+//}

@@ -14,6 +14,15 @@ Node *make_node(Parser *p, int type)
     return (node);
 }
 
+Type *make_type(Parser *p, int t)
+{
+	Type *type = &p->types[p->first_free_type++];
+
+	type->t = t;
+	type->ptr_to = 0;
+	return type;
+}
+
 Token *get_curr_token(Parser *p)
 {
     return &p->tokens[p->curr_token];
@@ -67,6 +76,7 @@ Node *parse(Token *tokens)
     p.nodes = calloc(sizeof(*p.nodes), token_count + 1);
     p.tokens = tokens;
     p.scopes = calloc(sizeof(*p.scopes), 128);
+	p.types = calloc(sizeof(*p.types), 128);
     
     enter_scope(&p);
 
@@ -101,8 +111,19 @@ Node    *find_var_decl(Parser *p, char *name)
 
 Node *parse_decl(Parser *p)
 {
+	p->curr_func->total_vars++;
+
 	expect_token(p, TOKEN_INT);
 
+	Type *t = make_type(p, TYPE_INT);
+
+	while (get_curr_token(p)->type == '*')
+	{
+		Type *prev = t;
+		t = make_type(p, TYPE_PTR);
+		t->ptr_to = prev;
+		skip_token(p);
+	}
     Node *node = make_node(p, NODE_VAR_DECL);
 
     for (int i = 0; i < p->curr_scope->decl_count; i++)
@@ -122,6 +143,8 @@ Node *parse_function(Parser *p)
 	expect_token(p, TOKEN_FN);
 
     Node *node = make_node(p, NODE_FUNC_DEF);
+
+	p->curr_func = node;
 
 	expect_token(p, TOKEN_IDENTIFIER);
 	expect_token(p, '(');
@@ -166,13 +189,16 @@ Node *parse_statement(Parser *p)
     Node *node = 0;
 
     if (get_curr_token(p)->type == TOKEN_INT)
+	{
 		node = parse_decl(p);
-
+		expect_token(p, ';');
+	}
 	else if (get_curr_token(p)->type == TOKEN_RETURN)
 	{
 		node = make_node(p, NODE_RETURN);
 		skip_token(p);
 		node->left = parse_expr(p, 0);
+		expect_token(p, ';');
 	}
     else if (get_curr_token(p)->type == TOKEN_WHILE)
     {
@@ -223,10 +249,12 @@ Node *parse_statement(Parser *p)
         skip_token(p);
 
         node->left = parse_expr(p, 0);
+		expect_token(p, ';');
     }
     else
     {
         node = parse_expr(p, 0);
+		expect_token(p, ';');
     }
     return (node);
 }
@@ -291,6 +319,18 @@ Node *parse_atom(Parser *p)
         else
             skip_token(p);
     }
+	else if (token->type == '*')
+	{
+		node = make_node(p, NODE_DEREF);
+		skip_token(p);
+		node->left = parse_atom(p);
+	}
+	else if (token->type == '&')
+	{
+		node = make_node(p, NODE_ADDR);
+		skip_token(p);
+		node->left = parse_atom(p);
+	}
     else if (token->type == '+')
     {
         skip_token(p);

@@ -107,14 +107,46 @@ int gen_ir(IR_Code *c, Node *node)
         assert(node->decl);
         assert(node->decl->type == NODE_VAR_DECL);
         reg = get_var_register(c, node->decl);
-        assert(reg >= 0);
 
+		IR_Instruction *e = add_instruction(c, OP_LOAD);
+		e->r1 = node->decl->stack_offset;
+		e->r1_imm = 1;
+		e->r2 = reg;
+
+        assert(reg >= 0);
     }
+	else if (node->type == NODE_DEREF)
+	{
+		assert(node->left->type == NODE_VAR);
+	
+		IR_Instruction *e = add_instruction(c, OP_LOAD);
+		e->r1 = get_var_register(c, node->left->decl);
+		e->r2 = c->curr_reg++;
+
+		reg = e->r2;
+	}
+	else if (node->type == NODE_ADDR)
+	{
+		int r = -1;
+		if (node->left->type == NODE_VAR)
+			r = node->left->decl->stack_offset;
+		else
+			assert(0);
+
+		// this later get updated after we know the stack size
+		IR_Instruction *e = add_instruction(c, OP_SUB);
+		e->r0 = c->curr_reg++;
+		e->r1 = REG_SP;
+		e->r2 = r;
+		e->r2_imm = 1;
+
+		reg = e->r0;
+	}
 	else if (node->type == NODE_RETURN)
 	{
 		int r = gen_ir(c, node->left);
 		IR_Instruction *e = add_instruction(c, OP_MOV);
-		e->r0 = 0;
+		e->r0 = REG_RT;
 		e->r1 = r;
 		add_instruction(c, OP_RET);
 	}
@@ -123,6 +155,9 @@ int gen_ir(IR_Code *c, Node *node)
 		c->vars_reg[0].decl = 0; // check
 
 		Function *f = find_function(c, node->token->name);
+
+		f->stack_size = 0;
+	//	f->stack_size = f->decl->total_vars * sizeof(int);
 
 		c->curr_func = f;
 		assert(f);
@@ -134,11 +169,37 @@ int gen_ir(IR_Code *c, Node *node)
 		int	i = 0;
 		while (arg)
 		{
-			set_var_register(c, arg, i + 1);
+			set_var_register(c, arg, REG_ARG0 + i);
 			arg = arg->next_arg;
 			i++;
 		}
+		{
+			IR_Instruction *e = add_instruction(c, OP_ADD);
+			e->r0 = REG_SP;
+			e->r1 = REG_SP;
+			e->r2_imm = 1;
+			// e->r2 will be updated later
+		}
+
         gen_ir(c, node->body);
+		// add return label
+		{
+			int ret_label = c->label_count++;
+			c->labels[ret_label] = c->instruction_count;
+			for (int j = f->first_instruction; j < c->instruction_count; j++)
+				if (c->instructions[j].op == OP_RET)
+				{
+					c->instructions[j].op = OP_JMP;
+					c->instructions[j].r0 = ret_label;
+				}
+		}
+
+		{
+			IR_Instruction *e = add_instruction(c, OP_SUB);
+			e->r0 = REG_SP;
+			e->r1 = REG_SP;
+			e->r2_imm = 1;
+		}
         add_instruction(c, OP_RET);
 		f->instruction_count = c->instruction_count - f->first_instruction;
 
@@ -155,63 +216,71 @@ int gen_ir(IR_Code *c, Node *node)
 
 		// TODO: check if this correct always
 		// also you don't need to save the result unless you will be called in the arguments
+		int call_arg_offset = c->curr_func->stack_size;
+		int my_arg_offset = c->curr_func->stack_size + node->arg_count * sizeof(int);
+
+		c->curr_func->stack_size += (node->arg_count + c->curr_func->decl->arg_count) * sizeof(int);
+
+		// gen function arguments and store them
 		i = 0;
 		while (arg)
 		{
 			regs[i] = gen_ir(c, arg);
 			assert(regs[i] != -1);
-			add_instruction(c, OP_PUSH)->r1 = regs[i];
-			arg = arg->next_arg;
+
+			IR_Instruction *e = add_instruction(c, OP_STORE);
+			e->r1 = call_arg_offset + i * sizeof(int);
+			e->r1_imm = 1;
+			e->r2 = regs[i];
+
 			i++;
+			arg = arg->next_arg;
 		}
 
-		// save my arguments
-
-
-		i = node->arg_count - 1;
-		while (i >= 0)
-		{
-			add_instruction(c, OP_POP)->r1 = regs[i];
-			i--;
-		}
-
+		// save my arguments before call
 		i = 0;
 		while (i < c->curr_func->decl->arg_count)
 		{
-			add_instruction(c, OP_PUSH)->r1 = i + 1;
-
+			IR_Instruction *e = add_instruction(c, OP_STORE);
+			e->r1 = my_arg_offset + i * sizeof(int);
+			e->r1_imm = 1;
+			e->r2 = REG_ARG0 + i;
 			i++;
 		}
 
+		// load function arguments
 		i = 0;
 		while (i < node->arg_count)
 		{
-			IR_Instruction *e = add_instruction(c, OP_MOV);
-			e->r0 = i + 1;
-			e->r1 = regs[i];
+			IR_Instruction *e = add_instruction(c, OP_LOAD);
+			e->r1 = call_arg_offset + i * sizeof(int);
+			e->r1_imm = 1;
+			e->r2 = REG_ARG0 + i;
 			i++;
 		}
 
         IR_Instruction *e = add_instruction(c, OP_CALL);
 
-		i = c->curr_func->decl->arg_count - 1;
-		while (i >= 0)
-		{
-			IR_Instruction *e = add_instruction(c, OP_POP);
-			e->r1 = i + 1;
-			i--;
-		}
-
 		Function *f = find_function(c, node->token->name);
+
+		// reload my arguments
+		i = 0;
+		while (i < c->curr_func->decl->arg_count)
+		{
+			IR_Instruction *e = add_instruction(c, OP_LOAD);
+			e->r1 = my_arg_offset + i * sizeof(int);
+			e->r1_imm = 1;
+			e->r2 = REG_ARG0 + i;
+			i++;
+		}
 
 		assert(f);
 
 		e->r0 = f->label;
 
-		//reg = 0;
 		e = add_instruction(c, OP_MOV);
 		e->r0 = c->curr_reg++;
-		e->r1 = 0;
+		e->r1 = REG_RT;
 
 		reg = e->r0;
     }
@@ -226,19 +295,56 @@ int gen_ir(IR_Code *c, Node *node)
     {
         int r1 = gen_ir(c, node->right);
 
-        IR_Instruction *e = add_instruction(c, OP_MOV);
-        e->r0 = gen_ir(c, node->left);
-        e->r1 = r1;
-        reg = e->r0;
+		if (node->left->type == NODE_DEREF)
+		{
+			assert(node->left->left->type == NODE_VAR);
+
+			int r = get_var_register(c, node->left->left->decl);
+
+			IR_Instruction *e = add_instruction(c, OP_STORE);
+			e->r1 = r;
+			e->r2 = r1;
+
+			reg = r1;
+		}
+		else
+		{
+			assert(node->left->type == NODE_VAR);
+			int vr = get_var_register(c, node->left->decl);
+
+        	IR_Instruction *e = add_instruction(c, OP_MOV);
+        	e->r0 = vr;
+        	e->r1 = r1;
+
+			e = add_instruction(c, OP_STORE);
+			e->r1 = node->left->decl->stack_offset;;
+			e->r1_imm = 1;
+			e->r2 = vr;
+
+        	reg = vr;
+		}
+
     }
     else if (node->type == NODE_BINOP)
     {
         int r1 = gen_ir(c, node->left);
-		add_instruction(c, OP_PUSH)->r1 = r1;
-        int r2 = gen_ir(c, node->right);
-		add_instruction(c, OP_POP)->r1 = r1;
 
-        IR_Instruction *e = add_instruction(c, token_type_to_ir_op(node->op));
+		int offset = c->curr_func->stack_size;
+		c->curr_func->stack_size += sizeof(int);
+
+		IR_Instruction *e = add_instruction(c, OP_STORE);
+		e->r1 = offset;
+		e->r1_imm = 1;
+		e->r2 = r1;
+
+        int r2 = gen_ir(c, node->right);
+
+		e = add_instruction(c, OP_LOAD);
+		e->r1 = offset;
+		e->r1_imm = 1;
+		e->r2 = r1;
+
+        e = add_instruction(c, token_type_to_ir_op(node->op));
         e->r0 = c->curr_reg;
         e->r1 = r1;
         e->r2 = r2;
@@ -290,6 +396,8 @@ int gen_ir(IR_Code *c, Node *node)
     }
     else if (node->type == NODE_VAR_DECL)
     {
+		node->stack_offset = c->curr_func->stack_size;
+		c->curr_func->stack_size += sizeof(int);
         reg = c->curr_reg++;
         set_var_register(c, node, reg);
     }
@@ -312,7 +420,7 @@ IR_Code *gen_ir_code(Node *node)
 			curr = curr->next_func;
 		}
 	}
-	c->reserved_reg++; // max param + return value
+	c->reserved_reg += REG_COUNT;
 
 	c->curr_reg = c->reserved_reg;
     c->instructions = calloc(sizeof(*c->instructions), 16384);
@@ -332,10 +440,35 @@ IR_Code *gen_ir_code(Node *node)
 	}
 
 	curr = node;
+	int	i = 0;
     while (curr)
     {
         gen_ir(c, curr);
+
+		// update stack size after computing intermediate stuff
+
+
+		for (int j = c->functions[i].first_instruction; j < 
+					 c->functions[i].first_instruction + c->functions[i].instruction_count;
+					 j++)
+		{
+			IR_Instruction *e = &c->instructions[j];
+
+			if (e->op == OP_SUB && !e->r1_imm && e->r1 == REG_SP)
+				e->r2 = c->functions[i].stack_size - e->r2;
+			else if ((e->op == OP_LOAD || e->op == OP_STORE) && e->r1_imm)
+				e->r1 = c->functions[i].stack_size - e->r1;
+		}
+
+		assert(c->instructions[c->labels[i]].r0 == REG_SP &&
+				c->instructions[c->labels[i] + c->functions[i].instruction_count - 2].r0 == REG_SP);
+
+		c->instructions[c->labels[i]].r2 = c->functions[i].stack_size;
+		c->instructions[c->labels[i]
+			+ c->functions[i].instruction_count - 2].r2 = c->functions[i].stack_size;
+
 		curr = curr->next_func;
+		i++;
     }
 
     return c;
@@ -372,6 +505,13 @@ int eval_op(int op, int r1, int r2)
     return res;
 }
 
+int	*get_int_from_stack(uint8_t *stack, int offset)
+{
+	assert(offset >= 0);
+	assert(offset % 4 == 0);
+	return (int *)(stack + offset);
+}
+
 void sim_ir_code(IR_Code *c)
 {
     int regs[128] = {0};
@@ -391,9 +531,8 @@ void sim_ir_code(IR_Code *c)
 
     ip = main->first_instruction;
 	int stack_max = 4096;
-	int *stack = malloc(stack_max * sizeof(int));
+	uint8_t *stack = malloc(stack_max * sizeof(int));
 	memset(stack, 0xcc, stack_max * sizeof(int));
-	int stack_top = 0;
 
     while (1)
     {
@@ -401,6 +540,7 @@ void sim_ir_code(IR_Code *c)
         
         int r1_value = (e->r1_imm ? e->r1 : regs[e->r1]);
         int r2_value = (e->r2_imm ? e->r2 : regs[e->r2]);
+		int addr = (e->r1_imm ? regs[REG_SP] - e->r1 : regs[e->r1]);
 
         if (e->op < OP_BINARY)
             regs[e->r0] = eval_op(e->op, r1_value, r2_value);
@@ -423,76 +563,124 @@ void sim_ir_code(IR_Code *c)
         {
             printf("%d\n", r1_value);
         }
-		else if (e->op == OP_PUSH)
-		{
-			if (stack_top == stack_max)
-			{
-				printf("SIM ERROR: stack overflow\n");
-				return ;
-			}
-			stack[stack_top++] = r1_value;
-		}
-		else if (e->op == OP_POP)
-		{
-			if (!stack_top)
-			{
-				printf("SIM ERROR: pop on an empty stack\n");
-				return ;
-			}
-			regs[e->r1] = stack[--stack_top];
-		}
         else if (e->op == OP_CALL)
         {
-			if (stack_top == stack_max)
+			if (regs[REG_SP] == stack_max)
 			{
 				printf("SIM ERROR: stack overflow\n");
 				return ;
 			}
-			stack[stack_top++] = ip + 1;
+			*get_int_from_stack(stack, regs[REG_SP]) = ip + 1;
+			regs[REG_SP] += sizeof(int);
             ip = c->labels[e->r0];
             continue ;
         }
         else if (e->op == OP_RET)
         {
-            if (stack_top == 0)
+            if (!regs[REG_SP])
                 break ;
-            ip = stack[--stack_top];
+
+			regs[REG_SP] -= sizeof(int);
+			ip = *get_int_from_stack(stack, regs[REG_SP]);
             continue ;
         }
-        else
+        else if (e->op == OP_LOAD)
+		{
+			assert(!e->r2_imm);
+			regs[e->r2] = *get_int_from_stack(stack, addr);
+		}
+		else if (e->op == OP_STORE)
+		{
+			*get_int_from_stack(stack, addr) = r2_value;
+		}
+		else
             assert(0);
         ip++;
     }
 	free(stack);
 }
 
+void int_to_str(char *s, int x)
+{
+	assert(x >= 0);
+	int n = x;
+	int len = (x == 0);
+	while (n)
+	{
+		len++;
+		n /= 10;
+	}
+	int i = len - 1;
+	while (i >= 0)
+	{
+		s[i] = x % 10 + '0';
+		x /= 10;
+		i--;
+	}
+}
+
+void get_reg_str(int r, int imm, char *s, int reserved)
+{
+	if (imm)
+		int_to_str(s, r);
+	else if (!r) memcpy(s, "rax", 3);
+	else if (r == 1) memcpy(s, "rsp", 3);
+	else if (r < REG_COUNT)
+		assert(0);
+	else if (r >= REG_COUNT && r < reserved)
+	{
+		s[0] = 'a';
+		int_to_str(s + 1, r - REG_COUNT);
+	}
+	else
+	{
+		s[0] = 't';
+		int_to_str(s + 1, r);
+	}
+}
+
 void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
 {
+	char r0[64] = {0};
+	char r1[64] = {0};
+	char r2[64] = {0};
+
+	get_reg_str(e->r0, 0,		  r0, c->reserved_reg);
+	get_reg_str(e->r1, e->r1_imm, r1, c->reserved_reg);
+	get_reg_str(e->r2, e->r2_imm, r2, c->reserved_reg);
+
     if (e->op == OP_JMP)
         printf("jmp %s%d", (in_block ? "B" : "L"), e->r0);
     else if (e->op == OP_JMPZ)
-        printf("jmpz %s%d t%d", (in_block ? "B" : "L"), e->r0, e->r1);
+        printf("jmpz %s%d %s", (in_block ? "B" : "L"), e->r0, r1);
     else if (e->op == OP_PRINT)
-        printf("print %s%d", e->r1_imm ? "" : "t", e->r1);
-	else if (e->op == OP_PUSH)
-		printf("push %s%d", e->r1_imm ? "" : "t", e->r1);
-	else if (e->op == OP_POP)
-		printf("pop t%d", e->r1);
+        printf("print %s", r1);
     else if (e->op == OP_CALL)
         printf("call %s", c->functions[in_block ? -e->r0 : e->r0].name);
     else if (e->op == OP_RET)
         printf("ret");
-    else
-    {
-        printf("t%d = ", e->r0);
-        if (e->op == OP_MOV)
-            printf("%s%d", e->r1_imm ? "" : "t", e->r1);
-        else
-        {
-            printf("%s%d %s %s%d", e->r1_imm ? "" : "t", e->r1,
-                    get_ir_op_str(e->op), e->r2_imm ? "" : "t", e->r2);
-        }
-    }
+	else if (e->op == OP_STORE)
+	{
+		if (e->r1_imm)
+			printf("[rsp - %d]", e->r1);
+		else
+			printf("[%s]", r1);
+		printf(" = %s", r2);
+	}
+	else if (e->op == OP_LOAD)
+	{
+		printf("%s = ", r2);
+		if (e->r1_imm)
+			printf("[rsp - %d]", e->r1);
+		else
+			printf("[%s]", r1);
+	}
+	else if (e->op == OP_MOV)
+		printf("%s = %s", r0, r1);
+    else if (e->op < OP_BINARY)
+        printf("%s = %s %s %s", r0, r1, get_ir_op_str(e->op), r2);
+	else
+		assert(0);
     printf("\n");
 }
 
@@ -610,7 +798,7 @@ void local_value_numbering_for_basic_block(IR_Code *c, IR_Basic_Block *b)
 {
     Local_Value_State *s = calloc(1, sizeof(*s)); // idk why not in stack, whatever
     
-    s->max_value_count = b->instruction_count * 2;
+    s->max_value_count = 1024;
     s->max_register_count = 1024;
 
     s->values           = calloc(s->max_value_count,     sizeof(*s->values));
@@ -630,7 +818,7 @@ void local_value_numbering_for_basic_block(IR_Code *c, IR_Basic_Block *b)
 
 		if (e->op == OP_CALL)
 		{
-
+			//TODO: think about this more
 			for (int j = 0; j < c->reserved_reg; j++) // use 1 + function_arg_count
 			{
 				Value v = {0};
@@ -642,7 +830,7 @@ void local_value_numbering_for_basic_block(IR_Code *c, IR_Basic_Block *b)
 			}
 
 		}
-		else if (e->op == OP_MOV || e->op == OP_PRINT || e->op == OP_PUSH)
+		else if (e->op == OP_MOV || e->op == OP_PRINT)
         {
 
             Value v = {0};
@@ -759,6 +947,11 @@ void local_value_numbering_for_basic_block(IR_Code *c, IR_Basic_Block *b)
 
             assign_register_to_value(s, e->r0, j);
         }
+		//else if (e->op == OP_LOAD)
+		//{
+
+		//	e->r2 = ;
+		//}
     }
 #if 0
     printf("values:\n");
@@ -780,6 +973,9 @@ void local_value_numbering_for_basic_block(IR_Code *c, IR_Basic_Block *b)
         printf("\n");
     }
 #endif
+	free(s->values);
+	free(s->value_owner);
+	free(s->register_value);
 
 }
 
@@ -814,7 +1010,13 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
             }
         }
 
-        if (i != f->first_instruction && (label_here || c->instructions[i - 1].op == OP_JMP ||
+		// remove jumps to next instruction
+		//if (i != f->first_instruction && c->instructions[i - 1].op == OP_JMP
+		//		&& c->labels[c->instructions[i - 1].r0] == i)
+		//{
+		//	curr_block->instruction_count--;
+		//}
+		if (i != f->first_instruction && (label_here || c->instructions[i - 1].op == OP_JMP ||
             c->instructions[i - 1].op == OP_JMPZ ||
             c->instructions[i - 1].op == OP_RET))
         {
@@ -915,7 +1117,7 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
 
         local_value_numbering_for_basic_block(c, block);
 	}
-#if 1
+#if 0
     while (1)
     {
 
@@ -935,10 +1137,10 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
                 IR_Instruction *e = &g->blocks[i].instructions[j];
 
                  if (!e->r1_imm && (e->op == OP_MOV || 
-                     e->op == OP_PRINT || e->op == OP_JMPZ || e->op < OP_BINARY ||
-					 e->op == OP_PUSH))
+                     e->op == OP_PRINT || e->op == OP_JMPZ || e->op < OP_BINARY
+					 || e->op == OP_LOAD || e->op == OP_STORE))
                      register_used[e->r1]++;
-                 if (e->op < OP_BINARY && !e->r2_imm)
+                 if (!e->r2_imm && (e->op < OP_BINARY || e->op == OP_LOAD || e->op == OP_STORE))
                      register_used[e->r2]++;
             }
         }
@@ -977,51 +1179,11 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
 #endif
 #if 1
                 if (remove || (((e->op == OP_MOV || e->op < OP_BINARY) && !register_used[e->r0])
-                    || (e->op == OP_MOV && !e->r1_imm && e->r0 == e->r1))
-					|| (e->op == OP_POP && !register_used[e->r1]))
-						
+                    || (e->op == OP_MOV && !e->r1_imm && e->r0 == e->r1)))
                 {
-					int op = e->op;
 					remove_instruction(&g->blocks[i], j);
-
-
-#if 1
-					if (op == OP_POP)
-					{
-
-						int k = j - 1;
-						for (; k >= 0; k--)
-							if (g->blocks[i].instructions[k].op == OP_PUSH)
-								break ;
-						assert(k >= 0);
-
-						remove_instruction(&g->blocks[i], k);
-					}
-#endif
 					j--;
                 }
-#endif
-#if 1
-				else if (e->op == OP_PUSH)
-				{
-					int k = j + 1;
-					int ok = 1;
-					for (; k < g->blocks[i].instruction_count; k++)
-					{
-						if (g->blocks[i].instructions[k].op == OP_CALL)
-							ok = 0;
-						else if (g->blocks[i].instructions[k].op == OP_POP)
-							break ;
-					}
-					if (ok && k < g->blocks[i].instruction_count && 
-							e->r1 == g->blocks[i].instructions[k].r1)
-					{
-
-						remove_instruction(&g->blocks[i], j);
-						remove_instruction(&g->blocks[i], k - 1);
-						j--;
-					}
-				}
 #endif
             }
         }
