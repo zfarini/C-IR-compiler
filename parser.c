@@ -10,38 +10,6 @@ int is_node_lvalue(Node *node)
 			node->type == NODE_DEREF;
 }
 
-char *token_type_to_str(int type)
-{
-	char *typenames[] = {
-		[0] = "end of file",
-		[TOKEN_NUMBER] = "number",
-		[TOKEN_IDENTIFIER] = "identifier",
-		[TOKEN_LOGICAL_AND] = "&&",
-		[TOKEN_LOGICAL_OR] = "||",
-		[TOKEN_EQUAL] = "==",
-		[TOKEN_NOT_EQUAL] = "!=",
-		[TOKEN_LESS_OR_EQUAL] = "<=",
-		[TOKEN_GREATER_OR_EQUAL] = ">=",
-		[TOKEN_WHILE] = "while",
-		[TOKEN_RETURN] = "return",
-		[TOKEN_IF] = "if",
-		[TOKEN_ELSE] = "else",
-		[TOKEN_INT] = "int",
-		[TOKEN_FN] = "fn",
-		[TOKEN_UNKNOWN] = "unkown",
-	};
-	static char s[256][2]; // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
-
-	assert(type < TOKEN_MAX);
-	if (!typenames[type])
-	{
-		s[type][0] = type;
-		s[type][1] = 0;
-		return s[type];
-	}
-	return typenames[type];
-}
-
 Node *make_node(Parser *p, int type)
 {
     Node *node = &p->nodes[p->first_free_node];
@@ -86,8 +54,8 @@ Token *expect_token(Parser *p, int type)
 	if (token->type != type)
 	{
 		error_token(token, "expected token `%s` but found `%s`", 
-					token_type_to_str(type),
-					token_type_to_str(token->type));
+					get_token_typename(type),
+					get_token_typename(token->type));
 	}
 		p->curr_token++;
 	return token;
@@ -121,8 +89,9 @@ Node *parse(Token *tokens)
 
     p.nodes = calloc(sizeof(*p.nodes), token_count + 1);
     p.tokens = tokens;
-    p.scopes = calloc(sizeof(*p.scopes), 128);
+    p.scopes = calloc(sizeof(*p.scopes), 512);
 	p.types = calloc(sizeof(*p.types), 128);
+	p.functions = calloc(sizeof(*p.functions), 128);
     
     enter_scope(&p);
 
@@ -140,19 +109,30 @@ Node *parse(Token *tokens)
     return res;
 }
 
-Node    *find_var_decl(Parser *p, char *name)
+Node *find_var_decl(Parser *p, char *name)
 {
     Scope *curr = p->curr_scope;
 
     while (curr)
     {
         for (int j = 0; j < curr->decl_count; j++)
-            if (!strcmp(curr->decls[j]->token->name, name)) // !1
+            if (!strcmp(curr->decls[j]->token->name, name))
                 return curr->decls[j];
         curr = curr->parent;
     }
 
     return 0;
+}
+
+Node *find_function_decl(Parser *p, char *name)
+{
+	for (int j = 0; j < p->function_count; j++)
+	{
+		if (!strcmp(name, p->functions[j]->token->name))
+			return p->functions[j];
+	}
+
+	return 0;
 }
 
 Node *parse_decl(Parser *p)
@@ -189,6 +169,11 @@ Node *parse_function(Parser *p)
 	expect_token(p, TOKEN_FN);
 
     Node *node = make_node(p, NODE_FUNC_DEF);
+
+	if (find_function_decl(p, node->token->name))
+		error_token(node->token, "redeclartion of function `%s`", node->token->name);
+
+	p->functions[p->function_count++] = node;
 
 	p->curr_func = node;
 
@@ -332,6 +317,11 @@ Node *parse_atom(Parser *p)
 
         if (get_curr_token(p)->type == '(')
         {
+            node->type = NODE_FUNC_CALL;
+			node->decl = find_function_decl(p, node->token->name);
+			if (!node->decl)
+				error_token(node->token, "undeclared function `%s`", node->token->name);
+
             skip_token(p);
 
 			Node *curr = node;
@@ -356,7 +346,6 @@ Node *parse_atom(Parser *p)
 					error_token(get_curr_token(p), "expected ',' or ')'");
 			}
 			expect_token(p, ')');
-            node->type = NODE_FUNC_CALL;
         }
         else
         {
@@ -410,7 +399,6 @@ Node *parse_atom(Parser *p)
 
     return (node);
 }
-
 
 /*
     ref: https://eli.thegreenplace.net/2012/08/02/parsing-expressions-by-precedence-climbing

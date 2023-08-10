@@ -111,6 +111,9 @@ struct Node
 	Type	*t;
 	int		total_vars;
 	int		stack_offset;
+
+	int		var_index;
+	int		func_index;
 };
 
 typedef struct Scope Scope;
@@ -133,8 +136,11 @@ typedef struct
     Scope   *scopes;
     int     scope_count;
 
+	Node	**functions;
+	int	     function_count;
+
 	Type	*types;
-	int first_free_type;
+	int 	first_free_type;
 	Node	*curr_func;
 } Parser;
 
@@ -198,6 +204,7 @@ typedef struct
 	int					first_instruction;
 	int					instruction_count;
 	int					label;
+	int					exit_label;
 	int					stack_size;
 	Control_Flow_Graph *cfg;
 } Function;
@@ -217,11 +224,9 @@ typedef struct
 
 	Node			*curr_node;
 
-    struct
-    {
-        Node *decl;
-        int reg;
-    }               vars_reg[256];
+	int				*vars_reg;
+	int				var_count;
+	int				func_index;
 } IR_Code;
 
 typedef struct IR_Basic_Block IR_Basic_Block;

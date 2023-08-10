@@ -31,8 +31,7 @@ int eval_op(int op, int r1, int r2)
 
 int	*get_int_from_stack(uint8_t *stack, int offset)
 {
-	if (offset < 0 || offset % 4)
-		return (0);
+	assert(offset >= 0 && offset % 4 == 0);
 	return (int *)(stack + offset);
 }
 
@@ -44,7 +43,15 @@ int	sim_ir_code(IR_Code *c)
     printf("\033[1;32msim output:\033[0m\n");
 
 
-	Function *main = find_function(c, "main");
+	Function *main = 0;
+	for (int j = 0; j < c->function_count; j++)
+	{
+		if (!strcmp(c->functions[j].name, "main"))
+		{
+			main = &c->functions[j];
+			break ;
+		}
+	}
 
     if (!main)
     {
@@ -132,14 +139,8 @@ int	sim_ir_code(IR_Code *c)
 		}
 		else
             assert(0);
-		//printf("IP: %d, ", ip);
-		//for (int j = 0; j < 8; j++)
-		//	printf("t%d = %d, ", j, regs[j]);
-		//printf("\n");
         ip++;
     }
 	free(stack);
 	return err;
 }
-
-

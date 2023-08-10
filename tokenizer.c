@@ -2,9 +2,59 @@
     we propably need to deal with '\r' ?
     DON'T try to optimize / simply code until we write the preprocessor
 
-    we can get away with generating a token on demand from parser
-    instead of generate all at once but do we really care?
+	we can generate tokens on demande from the parser but do we really care?
 */
+global struct
+{
+	char *name;
+	int type;
+} token_typenames[] = {
+	// keywords
+    {"while",       TOKEN_WHILE},
+    {"if",          TOKEN_IF},
+    {"else",        TOKEN_ELSE},
+    {"fn",          TOKEN_FN},
+    {"int",         TOKEN_INT},
+	{"return",		TOKEN_RETURN},
+	// operators (sort by length)
+    {"==",      TOKEN_EQUAL},
+    {"!=",      TOKEN_NOT_EQUAL},
+    {"<=",      TOKEN_LESS_OR_EQUAL},
+    {">=",      TOKEN_GREATER_OR_EQUAL},
+    {"&&",      TOKEN_LOGICAL_AND},
+    {"||",      TOKEN_LOGICAL_OR},
+	{"+", '+'},
+	{"-", '-'},
+	{"*", '*'},
+	{"/", '/'},
+	{"%", '%'},
+	{"<", '<'},
+	{">", '>'},
+	{"(", '('},
+	{")", ')'},
+	{"=", '='},
+	{";", ';'},
+	{"{", '{'},
+	{"}", '}'},
+	{"!", '!'},
+	{",", ','},
+	{"&", '&'},
+
+	{"end of file", 0},
+	{"unknown", TOKEN_UNKNOWN},
+	{"identifier", TOKEN_IDENTIFIER},
+	{"number", TOKEN_NUMBER},
+	{0, 0},
+};
+
+char *get_token_typename(int type)
+{
+	for (int i = 0; token_typenames[i].name; i++)
+		if (token_typenames[i].type == type)
+			return token_typenames[i].name;
+	assert(0);
+	return "UNDEFINED";
+}
 
 void error_token(Token *token, char *fmt, ...)
 {
@@ -22,37 +72,7 @@ void error_token(Token *token, char *fmt, ...)
 
 Token *tokenize(char *s)
 {
-    struct
-    {
-        char *name;
-        int type;
-    } keywords[] =
-    {
-        {"while",       TOKEN_WHILE},
-        {"if",          TOKEN_IF},
-        {"else",        TOKEN_ELSE},
-        {"fn",          TOKEN_FN},
-        {"int",         TOKEN_INT},
-		{"return",		TOKEN_RETURN},
-    };
-
-    struct
-    {
-        char *name;
-        int type;
-    } multi_char_tokens[] =
-    {
-        {"==",      TOKEN_EQUAL},
-        {"!=",      TOKEN_NOT_EQUAL},
-        {"<=",      TOKEN_LESS_OR_EQUAL},
-        {">=",      TOKEN_GREATER_OR_EQUAL},
-        {"&&",      TOKEN_LOGICAL_AND},
-        {"||",      TOKEN_LOGICAL_OR},
-    };
-
-	char	*single_char_tokens = "+-*/%<>()=;{}!,&";
-
-    int max_token_count = (int)strlen(s) + 1;
+    int 	max_token_count = (int)strlen(s) + 1;
     Token   *tokens = calloc(sizeof(Token), max_token_count);
 
     int     i = 0;
@@ -107,39 +127,29 @@ Token *tokenize(char *s)
 
             token->name = calloc(i - token->c0 + 1, 1);
             memcpy(token->name, s + token->c0, i - token->c0);
-            // @Speed
-            for (int j = 0; j < array_length(keywords); j++)
+            for (int j = 0; token_typenames[j].name; j++)
             {
-                if (!strcmp(token->name, keywords[j].name))
+                if (!strcmp(token->name, token_typenames[j].name))
                 {
-                    token->type = keywords[j].type;
+                    token->type = token_typenames[j].type;
                     break ;
                 }
             }
         }
         else {
-            // @Speed
-            for (int j = 0; j < array_length(multi_char_tokens); j++)
+            for (int j = 0; token_typenames[j].name; j++)
             {
-                int len = (int)strlen(multi_char_tokens[j].name);
-                if (!strncmp(s + i, multi_char_tokens[j].name, len))
+                int len = (int)strlen(token_typenames[j].name);
+                if (!strncmp(s + i, token_typenames[j].name, len))
                 {
-                    token->type = multi_char_tokens[j].type;
+                    token->type = token_typenames[j].type;
                     i += len;
                     break ;
                 }
             }
             
             if (token->type == TOKEN_UNKNOWN)
-            {
-                if (find_char_in_str(single_char_tokens, s[i]))
-                {
-                    token->type = s[i];
-                    i++;
-                }
-                else
-                    error_token(token, "unkown token '%c' (ascii %d)", s[i], s[i]);
-            }
+                error_token(token, "unkown token '%c' (ascii %d)", s[i], s[i]);
         }
 
         token->c1 = i;

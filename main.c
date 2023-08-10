@@ -42,7 +42,7 @@ char *load_entire_file(char *filename)
     return result;
 }
 
-#if 1
+#if 0
 IR_Code *cfg_to_ir_code(IR_Code *c)
 {
     IR_Code *res = calloc(1, sizeof(*res));

@@ -1,3 +1,4 @@
+#if 0
 enum
 {
     VALUE_VALUE,
@@ -508,3 +509,4 @@ Control_Flow_Graph *gen_function_control_flow_graph(IR_Code *c, Function *f)
 
     return g;
 }
+#endif

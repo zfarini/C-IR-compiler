@@ -1,3 +1,5 @@
 cleanup code
 add types (to ast and ir)
 add arrays + string
+
+visualise simulation, pretty much like a debugger

@@ -1,3 +1,32 @@
+char *get_ir_op_str(int type)
+{
+    local char s[256][2]; // ???
+    struct {
+        char *name;
+        int type;
+    } op_str[] = {
+        {"==",      OP_EQUAL},
+        {"!=",      OP_NOT_EQUAL},
+        {"<=",      OP_LESS_OR_EQUAL},
+        {">=",      OP_GREATER_OR_EQUAL},
+    };
+
+    if (type < 256)
+    {
+        s[type][0] = type;
+        return s[type];
+    }
+    else
+    {
+        for (int i = 0; i < array_length(op_str); i++)
+            if (op_str[i].type == type)
+                return op_str[i].name;
+    }
+
+    assert(0);
+    return "UNKOWN_OP_STR";
+}
+
 void int_to_str(char *s, int x)
 {
 	assert(x >= 0);
@@ -116,5 +145,3 @@ void print_ir_code(IR_Code *c)
         assert(c->labels[j] <= c->instruction_count);
     }
 }
-
-
