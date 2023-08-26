@@ -14,7 +14,7 @@ int token_type_to_ir_op(int type)
         assert(0);
 }
 
-int get_var_register(IR_Code *c, Node *var)
+Register get_var_register(IR_Code *c, Node *var)
 {
 	//if (var->type != NODE_VAR_DECL)
 	//	var = var->decl;
@@ -22,12 +22,12 @@ int get_var_register(IR_Code *c, Node *var)
 	return c->vars_reg[var->var_index];
 }
 
-void set_var_register(IR_Code *c, Node *decl, int reg)
+void set_var_register(IR_Code *c, Node *decl, Register r)
 {
 	assert(decl->type == NODE_VAR_DECL);
 
 	decl->var_index = c->var_count++;
-	c->vars_reg[decl->var_index] = reg;
+	c->vars_reg[decl->var_index] = r;
 }
 
 IR_Instruction *add_instruction(IR_Code *c, int op)
@@ -49,33 +49,66 @@ Function *find_function(IR_Code *c, Node *func)
 	return &c->functions[func->func_index];
 }
 
-int gen_ir(IR_Code *c, Node *node)
+Register alloc_register(IR_Code *c, Type *t)
 {
-    int reg = -1;
+	Register r;
+
+	r.type = t;
+	r.i = c->curr_reg++;
+	r.imm = 0;
+	return r;
+}
+
+Register alloc_register_value(IR_Code *c, int value)
+{
+	(void)c;
+
+	Register r;
+
+	r.type = type_int;
+	r.imm = 1;
+	r.value = value;
+	return r;
+}
+
+int alloc_size_aligned(IR_Code *c, int size)
+{
+	assert(size == 1 || size == 2 || size == 4 || size == 8);
+
+	c->curr_func->stack_size = ((c->curr_func->stack_size + size - 1) / size) * size;
+	int res = c->curr_func->stack_size;
+	assert(res % size == 0);
+	c->curr_func->stack_size += size;
+	return res;
+}
+
+Register gen_ir(IR_Code *c, Node *node)
+{
+    Register reg = {0};
+
+	reg.i = -1;
 
 	c->curr_node = node;
     if (node->type == NODE_NUMBER)
     {
         IR_Instruction *e = add_instruction(c, OP_MOV);
-        e->r0 = c->curr_reg++;
-        e->r1 = node->value;
-        e->r1_imm = 1;
-        reg = e->r0;
+
+		e->r0 = alloc_register(c, node->t);
+		e->r1 = alloc_register_value(c, node->value);
+		reg = e->r0;
     }
     else if (node->type == NODE_VAR)
     {
         reg = get_var_register(c, node->decl);
 
 		IR_Instruction *e = add_instruction(c, OP_LOAD);
-		e->r1 = node->decl->stack_offset;
-		e->r1_imm = 1;
-		e->r2 = reg;
 
-        assert(reg >= 0);
+		e->r1 = alloc_register_value(c, node->decl->stack_offset);
+		e->r2 = reg;
     }
 	else if (node->type == NODE_DEREF)
 	{
-		int r;
+		Register r;
 
 		if (node->left->type == NODE_VAR)
 			r = get_var_register(c, node->left->decl);
@@ -84,7 +117,7 @@ int gen_ir(IR_Code *c, Node *node)
 
 		IR_Instruction *e = add_instruction(c, OP_LOAD);
 		e->r1 = r;
-		e->r2 = c->curr_reg++;
+		e->r2 = alloc_register(c, r.type);
 		reg = e->r2;
 	}
 	else if (node->type == NODE_ADDR)
@@ -92,12 +125,20 @@ int gen_ir(IR_Code *c, Node *node)
 		if (node->left->type == NODE_VAR)
 		{
 			// this later get updated after we know the stack size
+			//assert(0);
+
 			IR_Instruction *e = add_instruction(c, OP_SUB);
-			e->r0 = c->curr_reg++;
-			e->r1 = REG_SP;
-			e->r2 = node->left->decl->stack_offset;
-			e->r2_imm = 1;
-			reg = e->r0;
+			e->r0 = alloc_register(c, type_ulong);
+			e->r1.type = type_ulong;
+			e->r1.i = REG_SP;
+			e->r2 = alloc_register_value(c, node->left->decl->stack_offset);
+			e->r2.type = type_ulong;
+
+			IR_Instruction *f = add_instruction(c, OP_CAST);
+			f->r0 = alloc_register(c, node->t);
+			f->r1 = e->r0;
+
+			reg = f->r0;
 		}
 		else
 		{
@@ -107,20 +148,25 @@ int gen_ir(IR_Code *c, Node *node)
 	}
 	else if (node->type == NODE_RETURN)
 	{
-		int r = gen_ir(c, node->left);
+		Register r = gen_ir(c, node->left);
+
 		IR_Instruction *e = add_instruction(c, OP_MOV);
-		e->r0 = REG_RT;
+		e->r0.type = r.type;
+		e->r0.i = REG_RT;
 		e->r1 = r;
-		add_instruction(c, OP_JMP)->r0 = c->curr_func->exit_label;
+
+		add_instruction(c, OP_JMP)->label = c->curr_func->exit_label;
 	}
 	else if (node->type == '!')
 	{
-		int r = gen_ir(c, node->left);
+		assert(0);
 
-		IR_Instruction *e = add_instruction(c, OP_NOT);
-		e->r0 = c->curr_reg++;
-		e->r1 = r;
-		reg = e->r0;
+		//int r = gen_ir(c, node->left);
+
+		//IR_Instruction *e = add_instruction(c, OP_NOT);
+		//e->r0 = c->curr_reg++;
+		//e->r1 = r;
+		//reg = e->r0;
 	}
     else if (node->type == NODE_VARS_DECL)
     {
@@ -128,24 +174,23 @@ int gen_ir(IR_Code *c, Node *node)
 
 		while (curr)
 		{
-			int var_reg = c->curr_reg++;
+			Register var_reg = alloc_register(c, curr->t);
 
-			curr->stack_offset = c->curr_func->stack_size;
-			c->curr_func->stack_size += sizeof(int);
+			curr->stack_offset = alloc_size_aligned(c, curr->t->size);
+
         	set_var_register(c, curr, var_reg);
 			
 			if (curr->assign)
 			{
-				int r1 = gen_ir(c, curr->assign);
+				Register r1 = gen_ir(c, curr->assign);
 
 				IR_Instruction *e = add_instruction(c, OP_MOV);
 				e->r0 = var_reg;
 				e->r1 = r1;
+
 				e = add_instruction(c, OP_STORE);
-				e->r1 = curr->stack_offset;
-				e->r1_imm = 1;
+				e->r1 = alloc_register_value(c, curr->stack_offset);
 				e->r2 = var_reg;
-				//assert(0);
 			}
 
 			curr = curr->next_decl;
@@ -153,11 +198,11 @@ int gen_ir(IR_Code *c, Node *node)
     }
     else if (node->type == NODE_BINOP && node->op == '=')
     {
-        int r1 = gen_ir(c, node->right);
+        Register r1 = gen_ir(c, node->right);
 
 		if (node->left->type == NODE_DEREF)
 		{
-			int r;
+			Register r;
 
 			if (node->left->left->type == NODE_VAR)
 				r = get_var_register(c, node->left->left->decl);
@@ -172,15 +217,14 @@ int gen_ir(IR_Code *c, Node *node)
 		else
 		{
 			assert(node->left->type == NODE_VAR);
-			int vr = get_var_register(c, node->left->decl);
+			Register vr = get_var_register(c, node->left->decl);
 
         	IR_Instruction *e = add_instruction(c, OP_MOV);
         	e->r0 = vr;
         	e->r1 = r1;
 
 			e = add_instruction(c, OP_STORE);
-			e->r1 = node->left->decl->stack_offset;
-			e->r1_imm = 1;
+			e->r1 = alloc_register_value(c, node->left->decl->stack_offset);
 			e->r2 = vr;
 
         	reg = vr;
@@ -188,10 +232,9 @@ int gen_ir(IR_Code *c, Node *node)
     }
     else if (node->type == NODE_BINOP)
     {
-        int r1 = gen_ir(c, node->left);
+        Register r1 = gen_ir(c, node->left);
 
-		int offset = c->curr_func->stack_size;
-		c->curr_func->stack_size += sizeof(int);
+		int offset = alloc_size_aligned(c, r1.type->size);
 		
 		// if we have f(..) + f(..)
 		// then we generate something like
@@ -200,29 +243,27 @@ int gen_ir(IR_Code *c, Node *node)
 		// the problem is that the second call will overwrite t1
 		// so we have to save it in the stack
 		IR_Instruction *e = add_instruction(c, OP_STORE);
-		e->r1 = offset;
-		e->r1_imm = 1;
+		e->r1 = alloc_register_value(c, offset);
 		e->r2 = r1;
 
-        int r2 = gen_ir(c, node->right);
+        Register r2 = gen_ir(c, node->right);
 
 		e = add_instruction(c, OP_LOAD);
-		e->r1 = offset;
-		e->r1_imm = 1;
+		e->r1 = alloc_register_value(c, offset);
 		e->r2 = r1;
 
         e = add_instruction(c, token_type_to_ir_op(node->op));
-        e->r0 = c->curr_reg;
+        e->r0 = alloc_register(c, node->t);
         e->r1 = r1;
         e->r2 = r2;
 
-        reg = c->curr_reg;
-        c->curr_reg++;
+        reg = e->r0;
     }
     else if (node->type == NODE_FUNC_DEF)
     {
 		Function *f = find_function(c, node);
-		f->stack_size = node->arg_count * sizeof(int);
+
+	//	f->stack_size = node->arg_count * sizeof(int);
 		f->first_instruction = c->instruction_count;
 		c->curr_func = f;
 		c->labels[f->label] = c->instruction_count;
@@ -232,21 +273,26 @@ int gen_ir(IR_Code *c, Node *node)
 		// after we finish
 		{
 			IR_Instruction *e = add_instruction(c, OP_ADD);
-			e->r0 = REG_SP;
-			e->r1 = REG_SP;
-			e->r2_imm = 1;
+			e->r0.i = REG_SP;
+			e->r0.type = type_ulong;
+			e->r1.i = REG_SP;
+			e->r1.type = type_ulong;
+			e->r2.imm = 1;
+			e->r2.type = type_ulong;
 			// r2 will be updated later after we know the total stack size
 		}
 		Node *arg = node->first_arg;
 		int	i = 0;
 		while (arg)
 		{
-			set_var_register(c, arg, REG_ARG0 + i);
-			arg->stack_offset = i * sizeof(int);
+			Register var_reg = {.i = REG_ARG0 + i};
+
+			set_var_register(c, arg, var_reg);
+			arg->stack_offset = alloc_size_aligned(c, arg->t->size);
+	//		arg->stack_offset = i * sizeof(int);
 			IR_Instruction *e = add_instruction(c, OP_STORE);
-			e->r1 = arg->stack_offset;
-			e->r1_imm = 1;
-			e->r2 = REG_ARG0 + i;
+			e->r1 = alloc_register_value(c, arg->stack_offset);
+			e->r2 = var_reg;
 
 			arg = arg->next_arg;
 			i++;
@@ -257,9 +303,12 @@ int gen_ir(IR_Code *c, Node *node)
 		c->labels[f->exit_label] = c->instruction_count;
 		{
 			IR_Instruction *e = add_instruction(c, OP_SUB);
-			e->r0 = REG_SP;
-			e->r1 = REG_SP;
-			e->r2_imm = 1;
+			e->r0.i = REG_SP;
+			e->r0.type = type_ulong;
+			e->r1.i = REG_SP;
+			e->r1.type = type_ulong;
+			e->r2.imm = 1;
+			e->r2.type = type_ulong;
 			// r2 will be updated later
 		}
         add_instruction(c, OP_RET);
@@ -267,6 +316,8 @@ int gen_ir(IR_Code *c, Node *node)
     }
     else if (node->type == NODE_FUNC_CALL)
     {
+		assert(0);
+#if 0
 		int	i;
 		int call_arg_offset = c->curr_func->stack_size;
 		int my_arg_offset = 0; // they are the first thing we alloc
@@ -323,7 +374,7 @@ int gen_ir(IR_Code *c, Node *node)
 		// 4
 		Function *f = find_function(c, node);
         IR_Instruction *e = add_instruction(c, OP_CALL);
-		e->r0 = f->label;
+		e->label = f->label;
 		// 5
 		i = 0;
 		while (i < c->curr_func->decl->arg_count)
@@ -339,7 +390,9 @@ int gen_ir(IR_Code *c, Node *node)
 		e->r0 = c->curr_reg++;
 		e->r1 = REG_RT;
 		reg = e->r0;
+#endif
     }
+#if 0
     else if (node->type == NODE_WHILE || node->type == NODE_IF)
     {
         int start_label = c->label_count;
@@ -374,6 +427,8 @@ int gen_ir(IR_Code *c, Node *node)
         if (f)
             f->r0 = exit_label;
     }
+
+#endif
     else if (node->type == NODE_BLOCK)
     {
         Node *curr = node->first_stmt;
@@ -386,19 +441,28 @@ int gen_ir(IR_Code *c, Node *node)
     }
 	else if (node->type == NODE_PRINT)
     {
-        int r = gen_ir(c, node->left);
+        Register r = gen_ir(c, node->left);
 
         IR_Instruction *e = add_instruction(c, OP_PRINT);
         e->r1 = r;
     }
 	else if (node->type == NODE_ASSERT)
 	{
-        int r = gen_ir(c, node->left);
+        Register r = gen_ir(c, node->left);
 
         IR_Instruction *e = add_instruction(c, OP_ASSERT);
         e->r1 = r;
 	}
-    else
+    else if (node->type == NODE_CAST)
+	{
+		Register r = gen_ir(c, node->left);
+
+		IR_Instruction *e = add_instruction(c, OP_CAST);
+		e->r0 = alloc_register(c, node->t);
+		e->r1 = r;
+		reg = e->r0;
+	}
+	else
         assert(0);
     return reg;
 }
@@ -455,18 +519,18 @@ IR_Code *gen_ir_code(Node *node)
 		{
 			IR_Instruction *e = &c->instructions[j];
 
-			if (e->op == OP_SUB && !e->r1_imm && e->r1 == REG_SP)
-				e->r2 = c->functions[i].stack_size - e->r2;
-			else if ((e->op == OP_LOAD || e->op == OP_STORE) && e->r1_imm)
-				e->r1 = c->functions[i].stack_size - e->r1;
+			if (e->op == OP_SUB && !e->r1.imm && e->r1.i == REG_SP)
+				e->r2.value = c->functions[i].stack_size - e->r2.value;
+			else if ((e->op == OP_LOAD || e->op == OP_STORE) && e->r1.imm)
+				e->r1.value = c->functions[i].stack_size - e->r1.value;
 		}
 		// update the sub / add instructions for allocating the stack
 		// which currently are the first instruction and the one before the last one (before "ret")
-		assert(c->instructions[c->labels[i]].r0 == REG_SP &&
-				c->instructions[c->labels[i] + c->functions[i].instruction_count - 2].r0 == REG_SP);
-		c->instructions[c->labels[i]].r2 = c->functions[i].stack_size;
+		assert(c->instructions[c->labels[i]].r0.i == REG_SP &&
+				c->instructions[c->labels[i] + c->functions[i].instruction_count - 2].r0.i == REG_SP);
+		c->instructions[c->labels[i]].r2.value = c->functions[i].stack_size;
 		c->instructions[c->labels[i]
-			+ c->functions[i].instruction_count - 2].r2 = c->functions[i].stack_size;
+			+ c->functions[i].instruction_count - 2].r2.value = c->functions[i].stack_size;
 
 		curr = curr->next_func;
 		i++;

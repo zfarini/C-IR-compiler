@@ -1,18 +1,23 @@
-void f()
-{
-	print 20;
-}
+/*
+TODO:
+	alignement 
+	explicit cast
+	sizeof
+*/
 
 int main()
 {
-	char c = 5;
-	int x = 2;
-	
-	unsigned int y = 72;
-	
+	int c;
+	c = 5;
+	print c;
+
+	int *p = &c;
+	*p = 7;
+	print c;
+
 	//TODO: b == c, return should be type int 
 	//also check type for !
+	//also pointer diff
+	
 
-	print y;
-	f() + 5;
 }

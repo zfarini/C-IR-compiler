@@ -78,6 +78,22 @@ void error_token(Token *token, char *fmt, ...)
     exit(1);
 }
 
+void skip_chars(char *s, int *i, int *line, int *col, int count)
+{
+	while (count)
+	{
+		if (s[*i] == '\n')
+		{
+			*line = *line + 1;
+			*col = 1;
+		}
+		else
+			*col = *col + 1;
+		*i = *i + 1;
+		count--;
+	}
+}
+
 Token *tokenize(char *s)
 {
     int 	max_token_count = (int)strlen(s) + 1;
@@ -92,31 +108,21 @@ Token *tokenize(char *s)
     {
          // @Speed: a tab might be 4/8 spaces maybe we want something faster
         while (isspace(s[i]))
-        {
-            if (s[i] == '\n')
-            {
-                line++;
-                col = 1;
-            }
-            else
-                col++;
-            i++;
-        }
+			skip_chars(s, &i, &line, &col, 1);
         if (s[i] == '/' && s[i + 1] == '/')
         {
-            i += 2;
             while (s[i] && s[i] != '\n')
-                i++;
+				skip_chars(s, &i, &line, &col, 1);
             continue ;
         }
 		else if (s[i] == '/' && s[i + 1] == '*')
 		{
-			i += 2;
+			skip_chars(s, &i, &line, &col, 2);
 			while (s[i] && !(s[i] == '*' && s[i + 1] == '/'))
-				i++;
+				skip_chars(s, &i, &line, &col, 1);
 			//TODO: error if not
 			if (s[i] == '*')
-				i += 2;
+				skip_chars(s, &i, &line, &col, 2);
 			continue ;
 		}
         if (!s[i])

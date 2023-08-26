@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 #define array_length(arr) ((int)(sizeof(arr) / sizeof(*arr)))
 
@@ -202,6 +203,7 @@ enum
 	OP_LOAD,
 	OP_STORE,
 	OP_ASSERT,
+	OP_CAST,
 };
 
 enum
@@ -214,12 +216,27 @@ enum
 
 typedef struct
 {
+	Type *type;
+	union {
+		int	 i;
+		int	 value;
+	};
+	int	 imm;
+} Register;
+
+typedef struct
+{
     int op;
-    int r0;
-    int r1;
-    int r2;
-    int r1_imm;
-    int r2_imm;
+
+	Register r0, r1, r2;
+	int label;
+//    int r0;
+//    int r1;
+//    int r2;
+//
+//    int r1_imm;
+//    int r2_imm;
+//
 	Node	*node;
 } IR_Instruction;
 
@@ -252,7 +269,7 @@ typedef struct
 
 	Node			*curr_node;
 
-	int				*vars_reg;
+	Register		*vars_reg;
 	int				var_count;
 	int				func_index;
 } IR_Code;
