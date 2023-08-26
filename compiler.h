@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <stdarg.h>
+#include <stdint.h>
 
 #define array_length(arr) ((int)(sizeof(arr) / sizeof(*arr)))
 
@@ -34,12 +35,24 @@ typedef enum
 	TOKEN_RETURN,
     TOKEN_IF,
     TOKEN_ELSE,
+
+	TOKEN_BEGIN_TYPES,
     TOKEN_INT,
+	TOKEN_CHAR,
+	TOKEN_SHORT,
+	TOKEN_LONG,
+	TOKEN_VOID,
+	TOKEN_FLOAT,
+	TOKEN_DOUBLE,
+	TOKEN_UNSIGNED,
+	TOKEN_SIGNED,
+	TOKEN_END_TYPES,
+
     TOKEN_FN,
 
     TOKEN_UNKNOWN,
 
-    TOKEN_MAX
+    TOKEN_COUNT
 } TokenType;
 
 typedef struct
@@ -57,40 +70,51 @@ typedef struct Node Node;
 
 enum NodeType
 {
-	
     NODE_FUNC_DEF = 256,
     NODE_FUNC_CALL,
     NODE_NUMBER,
     NODE_VAR,
     NODE_BINOP,
-    NODE_UNARY,
     NODE_WHILE,
     NODE_BLOCK,
     NODE_IF,
     NODE_PRINT,
 	NODE_ASSERT,
+	NODE_VARS_DECL,
     NODE_VAR_DECL,
 	NODE_RETURN,
 	NODE_DEREF,
 	NODE_ADDR,
+	NODE_CAST,
+	NODE_NOT,
 };
 
 typedef struct Type Type;
 
-enum
-{
-	TYPE_PTR,
-	TYPE_INT,
+enum {
+	PTR,
+	VOID,
+	INT,
+	CHAR,
+	SHORT,
+	LONG,
+	FLOAT,
+	DOUBLE,
 };
 
 struct Type
 {
-	int t;
+	int	t;
+	int	size;
+	int	is_unsigned;
 	Type *ptr_to;
 };
 
 struct Node
 {
+	Type	*t;
+	Type	*ret_type;
+
     int     type;
     int     op;
     int     value;
@@ -105,15 +129,19 @@ struct Node
     Node    *decl;
 	Node	*next_func;
 
+
+	Node	*next_decl;
+	Node	*assign;
+
 	Node	*first_arg;
 	Node	*next_arg;
 	int		arg_count;
-	Type	*t;
-	int		total_vars;
 	int		stack_offset;
 
 	int		var_index;
 	int		func_index;
+
+	Node	*function;
 };
 
 typedef struct Scope Scope;

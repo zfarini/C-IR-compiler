@@ -16,8 +16,8 @@ int token_type_to_ir_op(int type)
 
 int get_var_register(IR_Code *c, Node *var)
 {
-	if (var->type != NODE_VAR_DECL)
-		var = var->decl;
+	//if (var->type != NODE_VAR_DECL)
+	//	var = var->decl;
 	assert(var && var->type == NODE_VAR_DECL);
 	return c->vars_reg[var->var_index];
 }
@@ -122,12 +122,34 @@ int gen_ir(IR_Code *c, Node *node)
 		e->r1 = r;
 		reg = e->r0;
 	}
-    else if (node->type == NODE_VAR_DECL)
+    else if (node->type == NODE_VARS_DECL)
     {
-		node->stack_offset = c->curr_func->stack_size;
-		c->curr_func->stack_size += sizeof(int);
-        reg = c->curr_reg++;
-        set_var_register(c, node, reg);
+		Node *curr = node->next_decl;
+
+		while (curr)
+		{
+			int var_reg = c->curr_reg++;
+
+			curr->stack_offset = c->curr_func->stack_size;
+			c->curr_func->stack_size += sizeof(int);
+        	set_var_register(c, curr, var_reg);
+			
+			if (curr->assign)
+			{
+				int r1 = gen_ir(c, curr->assign);
+
+				IR_Instruction *e = add_instruction(c, OP_MOV);
+				e->r0 = var_reg;
+				e->r1 = r1;
+				e = add_instruction(c, OP_STORE);
+				e->r1 = curr->stack_offset;
+				e->r1_imm = 1;
+				e->r2 = var_reg;
+				//assert(0);
+			}
+
+			curr = curr->next_decl;
+		}
     }
     else if (node->type == NODE_BINOP && node->op == '=')
     {

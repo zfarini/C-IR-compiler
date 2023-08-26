@@ -1,10 +1,9 @@
 
-
-#include <stdio.h>
+void f()
+{
+}
 
 int main()
 {
-	int *ptr = 0;
-
-	printf("%p\n", &(*ptr));
+	f() + 5;
 }

@@ -1,5 +1,6 @@
 #include "compiler.h"
 #include <dirent.h>
+#include <sys/wait.h>
 
 char *find_char_in_str(char *s, char c)
 {
@@ -18,6 +19,8 @@ char *find_char_in_str(char *s, char c)
 #include "sim_ir.c"
 #include "print_ir.c"
 #include "optimize_ir.c"
+
+const char* __asan_default_options() { return "detect_leaks=0"; }
 
 char *load_entire_file(char *filename)
 {
@@ -104,7 +107,7 @@ IR_Code *cfg_to_ir_code(IR_Code *c)
 
 int main(int argc, char **argv)
 {
-	char	*filename = "code.txt";
+	char	*filename = "code.c";
 
 	if (argc > 1 && !strcmp(argv[1], "-t"))
 	{

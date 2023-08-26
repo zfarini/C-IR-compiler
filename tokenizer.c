@@ -15,6 +15,14 @@ global struct
     {"else",        TOKEN_ELSE},
     {"fn",          TOKEN_FN},
     {"int",         TOKEN_INT},
+	{"char",		TOKEN_CHAR},
+	{"short",		TOKEN_SHORT},
+	{"long",		TOKEN_LONG},
+	{"unsigned",	TOKEN_UNSIGNED},
+	{"signed",		TOKEN_SIGNED},
+	{"void",		TOKEN_VOID},
+	{"float",		TOKEN_FLOAT},
+	{"double",		TOKEN_DOUBLE},
 	{"return",		TOKEN_RETURN},
 	// operators (sort by length)
     {"==",      TOKEN_EQUAL},
@@ -101,6 +109,16 @@ Token *tokenize(char *s)
                 i++;
             continue ;
         }
+		else if (s[i] == '/' && s[i + 1] == '*')
+		{
+			i += 2;
+			while (s[i] && !(s[i] == '*' && s[i + 1] == '/'))
+				i++;
+			//TODO: error if not
+			if (s[i] == '*')
+				i += 2;
+			continue ;
+		}
         if (!s[i])
             break ;
 

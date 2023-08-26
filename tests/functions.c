@@ -1,35 +1,33 @@
-fn add(int a, int b)
+int add(int a, int b)
 {
 	return a + b;
 }
 
-fn double(int a)
+int mul2(int a)
 {
 	return add(a, a);
 }
 
-fn factorial(int n)
+int factorial(int n)
 {
 	if (n <= 1)
 		return 1;
 	return factorial(n - 1) * n;
 }
 
-fn fib(int n)
+int fib(int n)
 {
 	if (n <= 1)
 		return n;
 	return fib(n - 1) + fib(n - 2);
 }
 
-fn fib_itr(int n)
+int fib_itr(int n)
 {
-	int a;
-	int b;
+	int a = 0;
+	int b = 1;
 	int c;
 
-	a = 0;
-	b = 1;
 	while (n)
 	{
 		c = a + b;
@@ -40,7 +38,7 @@ fn fib_itr(int n)
 	return a;
 }
 
-fn test(int a, int b, int c)
+int test(int a, int b, int c)
 {
 	int d;
 	int e;
@@ -60,21 +58,18 @@ fn test(int a, int b, int c)
 	assert f == c;
 }
 
-fn main()
+void main()
 {
 	print add(1, 2);
 	assert add(1, 2) == 3;
 	assert add(add(1, 2), add(1, 2)) == 6;
 	assert add(add(1, add(1, 1)), add(add(0, 1), add(1, 1))) == 6;
-	assert double(5) == 10;
-	assert double(double(add(double(5), 4))) == (2 * 5 + 4) * 2 * 2;
+	assert mul2(5) == 10;
+	assert mul2(mul2(add(mul2(5), 4))) == (2 * 5 + 4) * 2 * 2;
 	assert factorial(5) == 120;
 	assert factorial(0) == 1;
-
 	{
-		int i;
-		i = 0;
-
+		int i = 0;
 		while (i <= 20)
 		{
 			assert fib_itr(i) == fib(i);

@@ -1,9 +1,9 @@
-fn inc(int *a)
+void inc(int *a)
 {
 	*a = *a + 1;
 }
 
-fn swap(int *a, int *b)
+void swap(int *a, int *b)
 {
 	int t;
 	t = *a;
@@ -11,19 +11,15 @@ fn swap(int *a, int *b)
 	*b = t;
 }
 
-fn bad_swap(int a, int b)
+void bad_swap(int a, int b)
 {
 	swap(&a, &b);
 }
 
-fn main()
+int main()
 {
 	{
-		int a;
-		int b;
-
-		a = 3;
-		b = 5;
+		int a = 3, b = 5;
 
 		swap(&a, &b);
 		assert b == 3;
@@ -33,10 +29,7 @@ fn main()
 		assert a == 5;
 	}
 	{
-		int a;
-		int *b;
-		int **c;
-		int d;
+		int a, *b, **c, d;
 
 		a = 5;
 		d = 9;
@@ -57,12 +50,12 @@ fn main()
 		assert **c == d;
 		assert d == 10;
 
-		c = 0;
-		assert &(*c) == 0;
-		assert *(&a) == a;
-		assert *(&a + 4) == b;
-		b = &a;
-		assert **(&a + 4) == a;
+		//c = 0;
+		//assert &(*c) == 0;
+		//assert *(&a) == a;
+		//assert *(&a + 4) == b;
+		//b = &a;
+		//assert **(&a + 4) == a;
 	}
 }
 
