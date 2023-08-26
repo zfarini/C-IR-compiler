@@ -6,26 +6,6 @@
 //	return (int *)(stack + offset);
 //}
 
-enum RValue_Type
-{
-	U64 = 1, U32, U16, U8, I64, I32, I16, I8
-};
-
-typedef struct RValue {
-	union {
-		uint64_t u64;
-		uint32_t u32;
-		uint16_t u16;
-		uint8_t	 u8;
-		int64_t  i64;
-		int32_t  i32;
-		int16_t  i16;
-		int8_t	 i8;
-	};
-	int type;
-} RValue;
-
-
 int get_rvalue_type_from_ctype(Type *t)
 {
 	int u = t->is_unsigned;
@@ -46,7 +26,6 @@ RValue eval_op(int op, RValue r1, RValue r2)
 	RValue r;
 
 	r.type = t;
-
 
     if (op == OP_ADD)
 	{
@@ -133,14 +112,13 @@ int	sim_ir_code(IR_Code *c)
     {
 		printf("at %d\n", ip);
         IR_Instruction *e = &c->instructions[ip];
-        
-		RValue r1_value;
-		if (e->r1.imm) r1_value.i32 = e->r1.value;
-		else r1_value = regs[e->r1.i];
 
-		RValue r2_value;
-		if (e->r2.imm) r2_value.i32 = e->r2.value;
-		else r2_value = regs[e->r2.i];
+		printf("at %d %d %d %d\n", ip, e->r0.type->size,
+				e->r1.type->size,
+				e->r2.type->size);
+        
+		RValue r1_value = e->r1.imm ? e->r1.value : regs[e->r1.i];
+		RValue r2_value = e->r2.imm ? e->r2.value : regs[e->r2.i];
 
 
         //int r1_value = (e->r1.imm ? e->r1.value : regs[e->r1]);
@@ -222,7 +200,7 @@ int	sim_ir_code(IR_Code *c)
 		else if (e->op == OP_STORE)
 		{
 			assert(e->r1.imm || r1_value.type == U64);
-			void *s = (void *)((e->r1.imm ? regs[REG_SP].u64 - (uint64_t)e->r1.value : r1_value.u64));
+			void *s = (void *)((e->r1.imm ? regs[REG_SP].u64 - (uint64_t)e->r1.value.u64 : r1_value.u64));
 	//		void *s = (void *)stack + addr;
 
 			int t = get_rvalue_type_from_ctype(e->r2.type);

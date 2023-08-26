@@ -49,7 +49,14 @@ void int_to_str(char *s, int x)
 void get_reg_str(Register r, char *s, int reserved)
 {
 	if (r.imm)
-		int_to_str(s, r.value);
+	{
+		if (r.value.type == I32)
+			sprintf(s, "%d", r.value.i32);
+		else if (r.value.type == U64)
+			sprintf(s, "0x%"PRIx64, r.value.u64);
+		else
+			assert(0);
+	}
 	else if (!r.i) memcpy(s, "rax", 3);
 	else if (r.i == 1) memcpy(s, "rsp", 3);
 	else if (r.i < REG_COUNT)
@@ -93,7 +100,7 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
 	else if (e->op == OP_STORE)
 	{
 		if (e->r1.imm)
-			printf("[rsp - %d]", e->r1.value);
+			printf("[rsp - %lu]", e->r1.value.u64);
 		else
 			printf("[%s]", r1);
 		printf(" = %s", r2);
@@ -102,7 +109,7 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
 	{
 		printf("%s = ", r2);
 		if (e->r1.imm)
-			printf("[rsp - %d]", e->r1.value);
+			printf("[rsp - %lu]", e->r1.value.u64);
 		else
 			printf("[%s]", r1);
 	}

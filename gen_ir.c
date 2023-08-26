@@ -59,7 +59,7 @@ Register alloc_register(IR_Code *c, Type *t)
 	return r;
 }
 
-Register alloc_register_value(IR_Code *c, int value)
+Register alloc_register_value(IR_Code *c, RValue value)
 {
 	(void)c;
 
@@ -94,7 +94,7 @@ Register gen_ir(IR_Code *c, Node *node)
         IR_Instruction *e = add_instruction(c, OP_MOV);
 
 		e->r0 = alloc_register(c, node->t);
-		e->r1 = alloc_register_value(c, node->value);
+		e->r1 = alloc_register_value(c, (RValue){.type = I32, .i32 = node->value});
 		reg = e->r0;
     }
     else if (node->type == NODE_VAR)
@@ -103,7 +103,7 @@ Register gen_ir(IR_Code *c, Node *node)
 
 		IR_Instruction *e = add_instruction(c, OP_LOAD);
 
-		e->r1 = alloc_register_value(c, node->decl->stack_offset);
+		e->r1 = alloc_register_value(c, (RValue){.type = I32, .i32 = node->decl->stack_offset});
 		e->r2 = reg;
     }
 	else if (node->type == NODE_DEREF)
@@ -131,7 +131,7 @@ Register gen_ir(IR_Code *c, Node *node)
 			e->r0 = alloc_register(c, type_ulong);
 			e->r1.type = type_ulong;
 			e->r1.i = REG_SP;
-			e->r2 = alloc_register_value(c, node->left->decl->stack_offset);
+			e->r2 = alloc_register_value(c, (RValue){.type = U64, .u64 = node->left->decl->stack_offset});
 			e->r2.type = type_ulong;
 
 			IR_Instruction *f = add_instruction(c, OP_CAST);
@@ -189,7 +189,7 @@ Register gen_ir(IR_Code *c, Node *node)
 				e->r1 = r1;
 
 				e = add_instruction(c, OP_STORE);
-				e->r1 = alloc_register_value(c, curr->stack_offset);
+				e->r1 = alloc_register_value(c, (RValue){.type = I32, .i32 = curr->stack_offset});
 				e->r2 = var_reg;
 			}
 
@@ -224,7 +224,7 @@ Register gen_ir(IR_Code *c, Node *node)
         	e->r1 = r1;
 
 			e = add_instruction(c, OP_STORE);
-			e->r1 = alloc_register_value(c, node->left->decl->stack_offset);
+			e->r1 = alloc_register_value(c, (RValue){.type = I32, .i32 = node->left->decl->stack_offset});
 			e->r2 = vr;
 
         	reg = vr;
@@ -243,13 +243,13 @@ Register gen_ir(IR_Code *c, Node *node)
 		// the problem is that the second call will overwrite t1
 		// so we have to save it in the stack
 		IR_Instruction *e = add_instruction(c, OP_STORE);
-		e->r1 = alloc_register_value(c, offset);
+		e->r1 = alloc_register_value(c, (RValue){.type = I32, .i32 = offset});
 		e->r2 = r1;
 
         Register r2 = gen_ir(c, node->right);
 
 		e = add_instruction(c, OP_LOAD);
-		e->r1 = alloc_register_value(c, offset);
+		e->r1 = alloc_register_value(c, (RValue){.type = I32, .i32 = offset});
 		e->r2 = r1;
 
         e = add_instruction(c, token_type_to_ir_op(node->op));
@@ -279,6 +279,7 @@ Register gen_ir(IR_Code *c, Node *node)
 			e->r1.type = type_ulong;
 			e->r2.imm = 1;
 			e->r2.type = type_ulong;
+			e->r2.value.type = U64;
 			// r2 will be updated later after we know the total stack size
 		}
 		Node *arg = node->first_arg;
@@ -291,7 +292,7 @@ Register gen_ir(IR_Code *c, Node *node)
 			arg->stack_offset = alloc_size_aligned(c, arg->t->size);
 	//		arg->stack_offset = i * sizeof(int);
 			IR_Instruction *e = add_instruction(c, OP_STORE);
-			e->r1 = alloc_register_value(c, arg->stack_offset);
+			e->r1 = alloc_register_value(c, (RValue){.type = I32, .i32 = arg->stack_offset});
 			e->r2 = var_reg;
 
 			arg = arg->next_arg;
@@ -520,17 +521,23 @@ IR_Code *gen_ir_code(Node *node)
 			IR_Instruction *e = &c->instructions[j];
 
 			if (e->op == OP_SUB && !e->r1.imm && e->r1.i == REG_SP)
-				e->r2.value = c->functions[i].stack_size - e->r2.value;
+			{
+				assert(e->r2.value.type == U64);
+				e->r2.value.u64 = c->functions[i].stack_size - (int)e->r2.value.u64;
+			}
 			else if ((e->op == OP_LOAD || e->op == OP_STORE) && e->r1.imm)
-				e->r1.value = c->functions[i].stack_size - e->r1.value;
+			{
+				assert(e->r1.value.type == I32);
+				e->r1.value.i32 = c->functions[i].stack_size - e->r1.value.i32;
+			}
 		}
 		// update the sub / add instructions for allocating the stack
 		// which currently are the first instruction and the one before the last one (before "ret")
 		assert(c->instructions[c->labels[i]].r0.i == REG_SP &&
 				c->instructions[c->labels[i] + c->functions[i].instruction_count - 2].r0.i == REG_SP);
-		c->instructions[c->labels[i]].r2.value = c->functions[i].stack_size;
+		c->instructions[c->labels[i]].r2.value.i32 = c->functions[i].stack_size;
 		c->instructions[c->labels[i]
-			+ c->functions[i].instruction_count - 2].r2.value = c->functions[i].stack_size;
+			+ c->functions[i].instruction_count - 2].r2.value.i32 = c->functions[i].stack_size;
 
 		curr = curr->next_func;
 		i++;

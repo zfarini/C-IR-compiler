@@ -206,6 +206,25 @@ enum
 	OP_CAST,
 };
 
+enum RValue_Type
+{
+	U64 = 1, U32, U16, U8, I64, I32, I16, I8
+};
+
+typedef struct RValue {
+	union {
+		uint64_t u64;
+		uint32_t u32;
+		uint16_t u16;
+		uint8_t	 u8;
+		int64_t  i64;
+		int32_t  i32;
+		int16_t  i16;
+		int8_t	 i8;
+	};
+	int type;
+} RValue;
+
 enum
 {
 	REG_RT,
@@ -218,8 +237,8 @@ typedef struct
 {
 	Type *type;
 	union {
-		int	 i;
-		int	 value;
+		int		i;
+		RValue	value;
 	};
 	int	 imm;
 } Register;
