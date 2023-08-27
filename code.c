@@ -1,26 +1,14 @@
-void func(long  c)
+int *inc(int *a)
 {
-    print (long)c;
-    print c;
-}
-
-unsigned long f()
-{
-    return 18446744073709551615;
-}
-
-int f2()
-{
-    return 0;
+	*a = *a + 1;
+    return a;
 }
 
 int main()
 {
-    double a = 0;
+    int a = 'a';
     
-    while (1)
-    {
-        print a;
-        a = a + 0.0001;
-    }
+    print (char)a;
+    print (char)'\n';
+    print (char)a;
 }

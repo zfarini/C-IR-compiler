@@ -105,7 +105,7 @@ void sprintf_reg_value(RValue r1_value, char *s)
     else if (r1_value.type == RV_I16)
         sprintf(s, "%"PRId16, r1_value.i16);
     else if (r1_value.type == RV_I8)
-        sprintf(s, "%"PRId8, r1_value.i8);
+        sprintf(s, "%c", r1_value.i8); // @Temporary
     else if (r1_value.type == RV_F64)
         sprintf(s, "%lf", r1_value.f64);
     else if (r1_value.type == RV_F32)
@@ -171,21 +171,55 @@ int	sim_ir_code(IR_Code *c)
         
         if (e->op < OP_BINARY)
 		{
+            int s = 0;
+            
             if (e->r1.type->t == PTR)
+                s = e->r1.type->ptr_to->size;
+            else if (e->r2.type->t == PTR)
+                s = e->r1.type->ptr_to->size;
+#define OP(op, v1, v2) do{\
+if (v2.type == RV_U64) regs[e->r0.i].u64 = v1.u64 op v2.u64 * s; \
+else if (v2.type == RV_U32) regs[e->r0.i].u64 = v1.u64 op v2.u32 * s; \
+else if (v2.type == RV_U16) regs[e->r0.i].u64 = v1.u64 op v2.u16 * s; \
+else if (v2.type == RV_U8) regs[e->r0.i].u64 = v1.u64 op v2.u8 * s; \
+else if (v2.type == RV_I64) regs[e->r0.i].u64 = v1.u64 op v2.i64 * s; \
+else if (v2.type == RV_I32) regs[e->r0.i].u64 = v1.u64 op v2.i32 * s; \
+else if (v2.type == RV_I16) regs[e->r0.i].u64 = v1.u64 op v2.i16 * s; \
+else if (v2.type == RV_I8) regs[e->r0.i].u64 = v1.u64 op v2.i8 * s; \
+else assert(0);\
+regs[e->r0.i].type = RV_U64; \
+} while(0)
+            
+            if (e->r1.type->t == PTR && e->r2.type->t == PTR)
             {
-                assert(!"add pointer arithmetic");
+                assert(e->op == OP_SUB);
+                assert(e->r0.type == type_int);
+                assert(e->r1.type->ptr_to->size == e->r2.type->ptr_to->size);
+                regs[e->r0.i].type = RV_I32;
+                regs[e->r0.i].i32 = (r1_value.u64 - r2_value.u64) / e->r1.type->ptr_to->size;
             }
-            //else
-            //assert(e->r1.type == e->r2.type && e->r0.type == e->r1.type);
-            regs[e->r0.i] = eval_op(e->op, r1_value, r2_value);
-            regs[e->r0.i].type = get_rvalue_type_from_ctype(e->r0.type);
-		}
+            else if (e->r1.type->t == PTR && (e->op == OP_SUB || e->op == OP_ADD))
+            {
+                if (e->op == OP_ADD)
+                    OP(+, r1_value, r2_value);
+                else
+                    OP(-, r1_value, r2_value);
+            }
+            else if (e->r2.type->t == PTR && e->op == OP_ADD)
+                OP(+, r2_value, r1_value);
+            else
+            {
+                regs[e->r0.i] = eval_op(e->op, r1_value, r2_value);
+                regs[e->r0.i].type = get_rvalue_type_from_ctype(e->r0.type);
+            }
+#undef OP
+        }
         else if (e->op == OP_MOV)
-		{
-			assert(!e->r0.imm);
-			//assert(e->r0.type == e->r1.type);
+        {
+            assert(!e->r0.imm);
+            //assert(e->r0.type == e->r1.type);
             regs[e->r0.i] = r1_value;
-		}
+        }
         else if (e->op == OP_NOT)
         {
             regs[e->r0.i].type = RV_I32;
@@ -212,8 +246,8 @@ int	sim_ir_code(IR_Code *c)
             //printf("line:%d: 0x%"PRIx64"\n", e->node->token->, r1_value.u64);
             
         }
-		else if (e->op == OP_ASSERT)
-		{
+        else if (e->op == OP_ASSERT)
+        {
             if (is_reg_value_zero(r1_value))
             {
                 printf("SIM ERROR: line %d: assert failed (value = ",
@@ -223,7 +257,7 @@ int	sim_ir_code(IR_Code *c)
                 err = 1;
                 break ;
             }
-		}
+        }
         else if (e->op == OP_CALL)
         {
             if ((void *)regs[REG_SP].u64 == stack + stack_max)
@@ -248,45 +282,45 @@ int	sim_ir_code(IR_Code *c)
             continue ;
         }
         else if (e->op == OP_LOAD)
-		{
+        {
             assert(!e->r2.imm);
-			
-			void *s = (void *)((e->r1.imm ? regs[REG_SP].u64 - (uint64_t)e->r1.value.u64 : r1_value.u64));
+            
+            void *s = (void *)((e->r1.imm ? regs[REG_SP].u64 - (uint64_t)e->r1.value.u64 : r1_value.u64));
             
             int t = get_rvalue_type_from_ctype(e->r2.type);
-			if 	 (t == RV_U64) regs[e->r2.i].u64 = *(uint64_t *)s;
-			else if (t == RV_U32) regs[e->r2.i].u32 = *(uint32_t *)s;
-			else if (t == RV_U16) regs[e->r2.i].u16 = *(uint16_t *)s;
-			else if (t == RV_U8)  regs[e->r2.i].u8  = *(uint8_t   *)s;
-			else if (t == RV_I64) regs[e->r2.i].i64 = *(int64_t  *)s;
-			else if (t == RV_I32) regs[e->r2.i].i32 = *(int32_t  *)s;
-			else if (t == RV_I16) regs[e->r2.i].i16 = *(int16_t  *)s;
+            if 	 (t == RV_U64) regs[e->r2.i].u64 = *(uint64_t *)s;
+            else if (t == RV_U32) regs[e->r2.i].u32 = *(uint32_t *)s;
+            else if (t == RV_U16) regs[e->r2.i].u16 = *(uint16_t *)s;
+            else if (t == RV_U8)  regs[e->r2.i].u8  = *(uint8_t   *)s;
+            else if (t == RV_I64) regs[e->r2.i].i64 = *(int64_t  *)s;
+            else if (t == RV_I32) regs[e->r2.i].i32 = *(int32_t  *)s;
+            else if (t == RV_I16) regs[e->r2.i].i16 = *(int16_t  *)s;
             else if (t == RV_I8)  regs[e->r2.i].i8  = *(int8_t   *)s;
             else if (t == RV_F32) regs[e->r2.i].f32 = *(float  *)s;
             else if (t == RV_F64) regs[e->r2.i].f64  = *(double   *)s;
             else assert(0);
             regs[e->r2.i].type = t;
         }
-		else if (e->op == OP_STORE)
-		{
-			assert(e->r1.imm || r1_value.type == RV_U64);
-			void *s = (void *)((e->r1.imm ? regs[REG_SP].u64 - (uint64_t)e->r1.value.u64 : r1_value.u64));
+        else if (e->op == OP_STORE)
+        {
+            assert(e->r1.imm || r1_value.type == RV_U64);
+            void *s = (void *)((e->r1.imm ? regs[REG_SP].u64 - (uint64_t)e->r1.value.u64 : r1_value.u64));
             
-			int t = get_rvalue_type_from_ctype(e->r2.type);
-			if 	 (t == RV_U64) *(uint64_t *)s = r2_value.u64;
-			else if (t == RV_U32) *(uint32_t *)s = r2_value.u32;
-			else if (t == RV_U16) *(uint16_t *)s = r2_value.u16;
-			else if (t == RV_U8)  *(uint8_t  *)s = r2_value.u8;
-			else if (t == RV_I64) *(int64_t  *)s = r2_value.i64;
-			else if (t == RV_I32) *(int32_t  *)s = r2_value.i32;
-			else if (t == RV_I16) *(int16_t  *)s = r2_value.i16;
-			else if (t == RV_I8)  *(int8_t   *)s = r2_value.i8;
+            int t = get_rvalue_type_from_ctype(e->r2.type);
+            if 	 (t == RV_U64) *(uint64_t *)s = r2_value.u64;
+            else if (t == RV_U32) *(uint32_t *)s = r2_value.u32;
+            else if (t == RV_U16) *(uint16_t *)s = r2_value.u16;
+            else if (t == RV_U8)  *(uint8_t  *)s = r2_value.u8;
+            else if (t == RV_I64) *(int64_t  *)s = r2_value.i64;
+            else if (t == RV_I32) *(int32_t  *)s = r2_value.i32;
+            else if (t == RV_I16) *(int16_t  *)s = r2_value.i16;
+            else if (t == RV_I8)  *(int8_t   *)s = r2_value.i8;
             else if (t == RV_F32) *(float    *)s = r2_value.f32;
             else if (t == RV_F64) *(double   *)s = r2_value.f64;
             else assert(0);
         }
-		else if (e->op == OP_CAST)
-		{
+        else if (e->op == OP_CAST)
+        {
             
             int t0 = get_rvalue_type_from_ctype(e->r0.type);
             int t1 = get_rvalue_type_from_ctype(e->r1.type);
@@ -333,10 +367,10 @@ F(d, 64, U, u, u), F(d, 32, U, u, u), F(d, 16, U, u, u), F(d, 8, U, u, u)
 #undef ALL_U
 #undef ALL_I
         }
-		else
+        else
             assert(0);
         ip++;
     }
-	free(stack);
-	return err;
+    free(stack);
+    return err;
 }

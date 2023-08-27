@@ -21,7 +21,10 @@
 
 
 #define array_length(arr) ((int)(sizeof(arr) / sizeof(*arr)))
-
+#undef max
+#undef min
+#define max(a, b) ((a) > (b) ? (a) : (b))
+#define min(a, b) ((a) < (b) ? (a) : (b))
 #define global static
 #define internal static
 #define local static

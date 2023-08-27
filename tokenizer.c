@@ -252,6 +252,32 @@ Token *tokenize(char *s)
                 }
             }
         }
+        else if (s[i] == '\'')
+        {
+            i++;
+            token->type = TOKEN_NUMBER;
+            token->value.type = RV_I32;
+            if (s[i] == '\\')
+            {
+                i++;
+                switch (s[i])
+                {
+                    case 'n': token->value.i32 = '\n'; break;
+                    case 't': token->value.i32 = '\t'; break;
+                    case 'r': token->value.i32 = '\r'; break;
+                    case 'f': token->value.i32 = '\f'; break;
+                    case 'b': token->value.i32 = '\b'; break;
+                    case 'a': token->value.i32 = '\a'; break;
+                    default : token->value.i32 = s[i]; break;
+                }
+            }
+            else
+                token->value.i32 = s[i];
+            i++;
+            if (s[i] != '\'')
+                error_token(token, "expected token `'`");
+            i++;
+        }
         else {
             for (int k = 0; token_typenames[k].name; k++)
             {

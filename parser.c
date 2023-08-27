@@ -237,6 +237,22 @@ Type *parse_base_type(Parser *p)
 	return base_type;
 }
 
+Type *parse_type(Parser *p)
+{
+    Type *base = parse_base_type(p);
+    
+    Type *res = base;
+    while (get_curr_token(p)->type == '*')
+    {
+        Type *new = &p->types[p->first_free_type++];
+        
+        *new = (Type){.t = PTR, .ptr_to = res, .size = 8, .is_unsigned = 1};
+        res = new;
+        skip_token(p);
+    }
+    return res;
+}
+
 Node *parse_decl(Parser *p, int multiple_decls, int allow_assign)
 {
 	Type *base_type = parse_base_type(p);
@@ -303,7 +319,7 @@ Node *parse_decl(Parser *p, int multiple_decls, int allow_assign)
 Node *parse_function(Parser *p)
 {
     Node *node = make_node(p, NODE_FUNC_DEF);
-	node->ret_type = parse_base_type(p);
+	node->ret_type = parse_type(p);
     
 	node->token = get_curr_token(p);
 	expect_token(p, TOKEN_IDENTIFIER);
@@ -500,7 +516,7 @@ Node *parse_atom(Parser *p)
         {
             node = make_node(p, NODE_CAST);
             
-            Type *t = parse_base_type(p);
+            Type *t = parse_type(p);
             
             node->t = t;
             expect_token(p, ')');
@@ -839,9 +855,12 @@ Type *add_type(Parser *p, Node *node)
         
 		if (t1->ptr_to || t2->ptr_to)
 		{
-			if ((tt == '*' || tt == '/' || tt == '%') || (!t1->ptr_to && tt == '-') 
+			if ((tt == '*' || tt == '/' || tt == '%') || (!t1->ptr_to && tt == '-')
 				|| (t1->ptr_to && t2->ptr_to && tt == '+') 
-				|| (t1->ptr_to && t2->ptr_to && tt == '-' && !types_are_equal(t1, t2)))
+				|| (t1->ptr_to && t2->ptr_to && tt == '-' && t1->ptr_to->size != t2->ptr_to->size)
+                || (t1->ptr_to && (t2->t == FLOAT || t2->t == DOUBLE || !t1->ptr_to->size))
+                || (t2->ptr_to && (t1->t == FLOAT || t1->t == DOUBLE
+                                   || !t2->ptr_to->size)))
 				error_token(node->token, "invalid operands to binary expression ('%s' and '%s')", get_type_str(t1), get_type_str(t2));
 			if (t1->ptr_to && !t2->ptr_to && (tt == '+' || tt == '-'))
 				t = t1;
