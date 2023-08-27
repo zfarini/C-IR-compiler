@@ -14,13 +14,13 @@ Type *type_uchar	= &(Type){.t = CHAR,	.size = 1, .is_unsigned = 1};
 int is_bin_op(int type)
 {
     return (find_char_in_str("+-*/%=<>", type) ||
-        (type > TOKEN_BINARY_BEGIN && type < TOKEN_BINARY_END));
+            (type > TOKEN_BINARY_BEGIN && type < TOKEN_BINARY_END));
 }
 
 int is_node_lvalue(Node *node)
 {
 	return node->type == NODE_VAR ||
-			node->type == NODE_DEREF;
+        node->type == NODE_DEREF;
 }
 
 int is_typename(int type)
@@ -31,20 +31,20 @@ int is_typename(int type)
 Node *make_node(Parser *p, int type)
 {
     Node *node = &p->nodes[p->first_free_node++];
-
+    
     node->type = type;
     node->token = &p->tokens[p->curr_token];
     node->value = node->token->value;
     node->op = node->token->type;
 	node->function = p->curr_func;
-
+    
     return node;
 }
 
 Type *make_type(Parser *p, int t)
 {
 	Type *type = &p->types[p->first_free_type++];
-
+    
 	type->t = t;
 	if (t == PTR)
 		type->is_unsigned = 1;
@@ -76,14 +76,14 @@ Token *skip_token(Parser *p)
 Token *expect_token(Parser *p, int type)
 {
 	Token *token = &p->tokens[p->curr_token];
-
+    
 	if (token->type != type)
 	{
 		error_token(token, "expected token `%s` but found `%s`", 
 					get_token_typename(type),
 					get_token_typename(token->type));
 	}
-		p->curr_token++;
+    p->curr_token++;
 	return token;
 }
 
@@ -96,7 +96,7 @@ Type *add_type(Parser *p, Node *node);
 void enter_scope(Parser *p)
 {
     Scope *new = &p->scopes[p->scope_count++];
-
+    
     new->parent = p->curr_scope;
     p->curr_scope = new;
 }
@@ -109,11 +109,11 @@ void leave_scope(Parser *p)
 Node *parse(Token *tokens)
 {
     Parser p = {0};
-
+    
     int token_count = 0;
     while (tokens[token_count].type)
         token_count++;
-
+    
     p.nodes = calloc(sizeof(*p.nodes), token_count + 1);
     p.tokens = tokens;
     p.scopes = calloc(sizeof(*p.scopes), 512);
@@ -121,19 +121,19 @@ Node *parse(Token *tokens)
 	p.functions = calloc(sizeof(*p.functions), 128);
     
     enter_scope(&p);
-
+    
     Node *res = parse_function(&p);
 	add_type(&p, res);
-
+    
     Node *curr = res;
-
+    
     while (p.tokens[p.curr_token].type)
     {
         curr->next_func = parse_function(&p);
         curr = curr->next_func;
 		add_type(&p, curr);
     }
-
+    
     leave_scope(&p);
     return res;
 }
@@ -141,15 +141,15 @@ Node *parse(Token *tokens)
 Node *find_var_decl(Parser *p, char *name)
 {
     Scope *curr = p->curr_scope;
-
+    
     while (curr)
     {
         for (int j = 0; j < curr->decl_count; j++)
             if (!strcmp(curr->decls[j]->token->name, name))
-                return curr->decls[j];
+            return curr->decls[j];
         curr = curr->parent;
     }
-
+    
     return 0;
 }
 
@@ -160,7 +160,7 @@ Node *find_function_decl(Parser *p, char *name)
 		if (!strcmp(name, p->functions[j]->token->name))
 			return p->functions[j];
 	}
-
+    
 	return 0;
 }
 
@@ -168,21 +168,21 @@ Type *parse_base_type(Parser *p)
 {
 	if (!is_typename(get_curr_token(p)->type))
 		error_token(get_curr_token(p), "expected a typename in var declaration");
-
+    
 	Type *base_type = 0;
 	Token *first_tok = get_curr_token(p);
-
-	int c[TOKEN_COUNT] = {};
-
+    
+	int c[TOKEN_COUNT] = {0};
+    
 	int last = -1;
 	while (is_typename(get_curr_token(p)->type))
 	{
 		int t = get_curr_token(p)->type;
-
+        
 		if ((c[TOKEN_VOID] || c[TOKEN_FLOAT] || c[TOKEN_DOUBLE])
 			|| (last != -1 && (t == TOKEN_VOID || t == TOKEN_FLOAT || t == TOKEN_DOUBLE)))				
 			error_token(get_curr_token(p), "both `%s` and `%s` in declaration specifiers", get_token_typename(last), get_token_typename(t));
-
+        
 		c[t]++;
 		if (c[t] > 1 && t != TOKEN_LONG)
 			error_token(get_curr_token(p), "duplicate `%s`", get_token_typename(t));
@@ -197,13 +197,13 @@ Type *parse_base_type(Parser *p)
 	int count = 0;
 	for (int i = TOKEN_BEGIN_TYPES; i < TOKEN_UNSIGNED; i++)
 		if (c[i])
-			count++;
-
+        count++;
+    
 	if (count > 1)
 		error_token(first_tok, "two or more data types in declaration specifiers");
 	
 	int u = c[TOKEN_UNSIGNED];
-
+    
 	if		(c[TOKEN_VOID])		base_type = type_void;
 	else if (c[TOKEN_FLOAT])	base_type = type_float;
 	else if (c[TOKEN_DOUBLE])	base_type = type_double;
@@ -211,52 +211,54 @@ Type *parse_base_type(Parser *p)
 	else if (c[TOKEN_INT]) 		base_type = u ? type_uint	: type_int;
 	else if (c[TOKEN_SHORT])	base_type = u ? type_ushort	: type_short;
 	else if (c[TOKEN_CHAR])		base_type = u ? type_uchar	: type_char;
-
+    else if (c[TOKEN_SIGNED]) base_type = type_int;
+    else if (c[TOKEN_UNSIGNED]) base_type = type_uint;
+    assert(base_type);
 	return base_type;
 }
 
 Node *parse_decl(Parser *p, int multiple_decls, int allow_assign)
 {
 	Type *base_type = parse_base_type(p);
-
+    
     Node *node = make_node(p, NODE_VARS_DECL);
 	node->t = base_type;
-
+    
 	Node *curr = node;
-
+    
 	if (get_curr_token(p)->type == ';')
 		return node;
 	while (1)
 	{
 		Type *t = base_type;
-
+        
 		while (get_curr_token(p)->type == '*')
 		{
 			Type *new = &p->types[p->first_free_type++];
-
+            
 			new->t = PTR;
 			new->ptr_to = t;
 			new->size = 8;
 			new->is_unsigned = 1;
 			t = new;
-
+            
 			skip_token(p);
 		}
 		curr->next_decl = make_node(p, NODE_VAR_DECL);
 		curr = curr->next_decl;
 		curr->decl = node;
 		curr->t = t;
-
+        
     	for (int i = 0; i < p->curr_scope->decl_count; i++)
     	    if (!strcmp(p->curr_scope->decls[i]->token->name, curr->token->name)
-					&& curr->token->type == TOKEN_IDENTIFIER)
-    	        error_token(curr->token, "redeclaration of variable '%s'", curr->token->name);
-
+                && curr->token->type == TOKEN_IDENTIFIER)
+            error_token(curr->token, "redeclaration of variable '%s'", curr->token->name);
+        
     	p->curr_scope->decls[p->curr_scope->decl_count] = curr;
     	p->curr_scope->decl_count++;
-
+        
 		expect_token(p, TOKEN_IDENTIFIER);
-	
+        
 		if (!multiple_decls)
 		{
 			node = curr;
@@ -282,25 +284,25 @@ Node *parse_function(Parser *p)
 {
     Node *node = make_node(p, NODE_FUNC_DEF);
 	node->ret_type = parse_base_type(p);
-
+    
 	node->token = get_curr_token(p);
 	expect_token(p, TOKEN_IDENTIFIER);
-
+    
 	if (find_function_decl(p, node->token->name))
 		error_token(node->token, "redeclartion of function `%s`", node->token->name);
-
+    
 	p->functions[p->function_count++] = node;
-
+    
 	p->curr_func = node;
-
+    
 	expect_token(p, '(');
-
+    
 	enter_scope(p);
-
+    
 	Node *curr = node;
-
+    
 	while (get_curr_token(p)->type != ')' 
-			&& get_curr_token(p)->type)
+           && get_curr_token(p)->type)
 	{
 		Node *decl = parse_decl(p, 0, 0);
 		
@@ -308,11 +310,11 @@ Node *parse_function(Parser *p)
 			node->first_arg = decl;
 		else
 			curr->next_arg = decl;
-
+        
 		curr = decl;
-
+        
 		node->arg_count++;
-
+        
 		if (get_curr_token(p)->type == ',')
 			skip_token(p);
 		else if (get_curr_token(p)->type != ')')
@@ -320,12 +322,12 @@ Node *parse_function(Parser *p)
 	}
     // read args
 	expect_token(p, ')');
-
+    
 	expect_token(p, '{');
 	p->curr_token--; // we call expect just for the error
-
+    
     node->body = parse_statement(p);
-
+    
 	leave_scope(p);
     return node;
 }
@@ -333,7 +335,7 @@ Node *parse_function(Parser *p)
 Node *parse_statement(Parser *p)
 {
     Node *node = 0;
-
+    
 	if (is_typename(get_curr_token(p)->type))
 	{
 		node = parse_decl(p, 1, 1);
@@ -359,7 +361,7 @@ Node *parse_statement(Parser *p)
         skip_token(p);
         node->left = parse_atom(p);
         node->right = parse_statement(p);
-
+        
         if (get_curr_token(p)->type == TOKEN_ELSE)
         {
             skip_token(p);
@@ -370,9 +372,9 @@ Node *parse_statement(Parser *p)
     {
         node = make_node(p, NODE_BLOCK);
         skip_token(p);
-
+        
         enter_scope(p);
-
+        
         Node *curr = node;
         while (get_curr_token(p)->type &&
                get_curr_token(p)->type != '}')
@@ -385,7 +387,7 @@ Node *parse_statement(Parser *p)
             curr = n;
         }
         skip_token(p);
-
+        
         leave_scope(p);
     }
     else if (get_curr_token(p)->type == TOKEN_IDENTIFIER &&
@@ -393,7 +395,7 @@ Node *parse_statement(Parser *p)
     {
         node = make_node(p, NODE_PRINT);
         skip_token(p);
-
+        
         node->left = parse_expr(p, 0);
 		expect_token(p, ';');
     }
@@ -402,7 +404,7 @@ Node *parse_statement(Parser *p)
     {
         node = make_node(p, NODE_ASSERT);
         skip_token(p);
-
+        
         node->left = parse_expr(p, 0);
 		expect_token(p, ';');
     }
@@ -417,9 +419,9 @@ Node *parse_statement(Parser *p)
 Node *parse_atom(Parser *p)
 {
     Node *node = 0;
-
+    
     Token *token = get_curr_token(p);
-
+    
     if (token->type == TOKEN_NUMBER)
     {
         node = make_node(p, NODE_NUMBER);
@@ -429,32 +431,32 @@ Node *parse_atom(Parser *p)
     {
         node = make_node(p, NODE_VAR);
         skip_token(p);
-
+        
         if (get_curr_token(p)->type == '(')
         {
             node->type = NODE_FUNC_CALL;
 			node->decl = find_function_decl(p, node->token->name);
 			if (!node->decl)
 				error_token(node->token, "undeclared function `%s`", node->token->name);
-
+            
             skip_token(p);
-
+            
 			Node *curr = node;
-
+            
 			// very similar to parse_function
 			while (get_curr_token(p)->type != ')' &&
-					get_curr_token(p)->type)
+                   get_curr_token(p)->type)
 			{
 				Node *arg = parse_expr(p, 0);
-
+                
 				if (curr == node)
 					node->first_arg = arg;
 				else
 					curr->next_arg = arg;
 				curr = arg;
-
+                
 				node->arg_count++;
-
+                
 				if (get_curr_token(p)->type == ',')
 					skip_token(p);
 				else if (get_curr_token(p)->type != ')')
@@ -472,8 +474,21 @@ Node *parse_atom(Parser *p)
     else if (token->type == '(')
     {
         skip_token(p);
-        node = parse_expr(p, 0);
-		expect_token(p, ')');
+        if (is_typename(get_curr_token(p)->type))
+        {
+            node = make_node(p, NODE_CAST);
+            
+            Type *t = parse_base_type(p);
+            
+            node->t = t;
+            expect_token(p, ')');
+            node->left = parse_atom(p);
+        }
+        else
+        {
+            node = parse_expr(p, 0);
+            expect_token(p, ')');
+        }
     }
 	else if (token->type == '*')
 	{
@@ -511,7 +526,7 @@ Node *parse_atom(Parser *p)
 	}
     else
         error_token(get_curr_token(p), "expected an expression");
-
+    
     return (node);
 }
 
@@ -534,49 +549,49 @@ Node *parse_expr(Parser *p, int min_prec)
     } op_table[TOKEN_COUNT] =
     {
         ['=']                       = {100, ASSOC_RIGHT},
-    
+        
         [TOKEN_LOGICAL_AND]         = {130, ASSOC_LEFT},
         [TOKEN_LOGICAL_OR]          = {130, ASSOC_LEFT},
-    
+        
         [TOKEN_EQUAL]               = {140, ASSOC_LEFT},
         [TOKEN_NOT_EQUAL]           = {140, ASSOC_LEFT},
-    
+        
         ['<']                       = {150, ASSOC_LEFT},
         ['>']                       = {150, ASSOC_LEFT},
         [TOKEN_LESS_OR_EQUAL]       = {150, ASSOC_LEFT},
         [TOKEN_GREATER_OR_EQUAL]    = {150, ASSOC_LEFT},
-    
+        
         ['+']                       = {200, ASSOC_LEFT},
         ['-']                       = {200, ASSOC_LEFT},
-    
+        
         ['*']                       = {300, ASSOC_LEFT},
         ['/']                       = {300, ASSOC_LEFT},
         ['%']                       = {300, ASSOC_LEFT},
     };
-
+    
     Node *res = parse_atom(p);
     
     while (1)
     {
         Token *token = get_curr_token(p);
-
+        
         if (!is_bin_op(token->type) || op_table[token->type].prec < min_prec)
             break;
-
+        
         int next_prec = op_table[token->type].prec;
         if (op_table[token->type].assoc == ASSOC_LEFT)
             next_prec++;
-
+        
         Node *node = make_node(p, NODE_BINOP);
         node->left = res;
         skip_token(p);
         node->right = parse_expr(p, next_prec);
-
+        
 		if (node->token->type == '=' && !is_node_lvalue(node->left))
 			error_token(node->left->token, "expected an lvalue");
         res = node;
     }
-
+    
     return (res);
 }
 
@@ -593,9 +608,9 @@ char *get_type_str(Type *type)
 			redir_count++;
 		}
 	}
-
+    
 	char *str = 0;
-
+    
 	if		(base->t == VOID)		str = "void";
 	else if (base->t == CHAR)		str = "char";
 	else if (base->t == INT)		str = "int";
@@ -605,18 +620,18 @@ char *get_type_str(Type *type)
 	else if (base->t == FLOAT)		str = "float";
 	else
 		assert(0);
-
+    
 	if (base->is_unsigned)
 	{
 		char *new = calloc(strlen(str) + 10, 1);
 		memcpy(new, "unsigned ", 9);
-		memcpy(new + 8, str, strlen(str));
+		memcpy(new + 9, str, strlen(str));
 		str = new;
 	}
 	if (redir_count)
 	{
-		int l = strlen(str);
-
+		int l = (int)strlen(str);
+        
 		char *new = calloc(l + redir_count + 2, 1);
 		memcpy(new, str, l);
 		new[l] = ' ';
@@ -626,7 +641,7 @@ char *get_type_str(Type *type)
 			free(str);
 		str = new;
 	}
-
+    
 	return str;
 }
 
@@ -753,21 +768,21 @@ Type *add_type(Parser *p, Node *node)
 	else if (node->type == NODE_BINOP && node->token->type == '=')
 	{
 		t = add_type(p, node->left);
-		add_type(p, node->right);
+        add_type(p, node->right);
 		implicit_cast(p, &node->right, t);
-	}
+    }
 	else if (node->type == NODE_BINOP)
 	{
 		Type *t1 = add_type(p, node->left);
 		Type *t2 = add_type(p, node->right);
-
+        
 		if (t1->t == VOID || t2->t == VOID)
 		{
 			error_token(t1->t == VOID ? node->left->token
-							: node->right->token, "`void` type in binary expression `%s`", get_token_typename(node->token->type));
+                        : node->right->token, "`void` type in binary expression `%s`", get_token_typename(node->token->type));
 		}
 		int tt = node->token->type;
-
+        
 		if (t1->ptr_to || t2->ptr_to)
 		{
 			if ((tt == '*' || tt == '/' || tt == '%') || (!t1->ptr_to && tt == '-') 
@@ -789,8 +804,10 @@ Type *add_type(Parser *p, Node *node)
 			if (tt == '+' || tt == '-' || tt == '*' || tt == '/' || tt == '%')
 				t = ct;
 			else
-				t = type_int;
-		}
+            {
+                t = type_int;
+            }
+        }
 	}
 	else if (node->type == NODE_DEREF)
 	{
@@ -815,7 +832,7 @@ Type *add_type(Parser *p, Node *node)
 	}
 	else
 		assert(0);
-	node->t = t;
-	return t;
+    node->t = t;
+    return t;
 }
 

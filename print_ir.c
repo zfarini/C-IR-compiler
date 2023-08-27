@@ -10,7 +10,7 @@ char *get_ir_op_str(int type)
         {"<=",      OP_LESS_OR_EQUAL},
         {">=",      OP_GREATER_OR_EQUAL},
     };
-
+    
     if (type < 256)
     {
         s[type][0] = type;
@@ -20,9 +20,9 @@ char *get_ir_op_str(int type)
     {
         for (int i = 0; i < array_length(op_str); i++)
             if (op_str[i].type == type)
-                return op_str[i].name;
+            return op_str[i].name;
     }
-
+    
     assert(0);
     return "UNKOWN_OP_STR";
 }
@@ -53,7 +53,7 @@ void get_reg_str(Register r, char *s, int reserved)
 		if (r.value.type == I32)
 			sprintf(s, "%d", r.value.i32);
 		else if (r.value.type == U64)
-			sprintf(s, "0x%"PRIx64, r.value.u64);
+			sprintf(s, "%"PRIu64, r.value.u64);
 		else
 			assert(0);
 	}
@@ -78,11 +78,11 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
 	char r0[64] = {0};
 	char r1[64] = {0};
 	char r2[64] = {0};
-
+    
 	get_reg_str(e->r0, r0, c->reserved_reg);
 	get_reg_str(e->r1, r1, c->reserved_reg);
 	get_reg_str(e->r2, r2, c->reserved_reg);
-
+    
     if (e->op == OP_JMP)
         printf("jmp %s%d", (in_block ? "B" : "L"), e->label);
     else if (e->op == OP_JMPZ)
@@ -100,7 +100,7 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
 	else if (e->op == OP_STORE)
 	{
 		if (e->r1.imm)
-			printf("[rsp - %lu]", e->r1.value.u64);
+			printf("[rsp - %"PRIu64"]", e->r1.value.u64);
 		else
 			printf("[%s]", r1);
 		printf(" = %s", r2);
@@ -109,7 +109,7 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
 	{
 		printf("%s = ", r2);
 		if (e->r1.imm)
-			printf("[rsp - %lu]", e->r1.value.u64);
+			printf("[rsp - %"PRIu64"]", e->r1.value.u64);
 		else
 			printf("[%s]", r1);
 	}
@@ -119,7 +119,7 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
         printf("%s = %s %s %s", r0, r1, get_ir_op_str(e->op), r2);
 	else if (e->op == OP_CAST)
 	{
-		printf("%s = (%s)%s", r0, get_type_str(e->node->t), r1);
+		printf("%s = (%s)%s", r0, get_type_str(e->r0.type), r1);
 	}
 	else
 		assert(0);
@@ -129,11 +129,11 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
 void print_ir_code(IR_Code *c)
 {
     printf("\033[1;32mgenerated ir:\033[0m (%d instructions, %d reserved registers)\n", c->instruction_count, c->reserved_reg);
-
+    
     for (int i = 0; i < c->instruction_count; i++)
     {
         IR_Instruction *e = &c->instructions[i];
-
+        
         for (int j = 0; j < c->label_count; j++)
         {
             if (c->labels[j] == i)
@@ -144,11 +144,11 @@ void print_ir_code(IR_Code *c)
                     printf("\tL%d:\n", j);
             }
         }
-
+        
         printf("%-16d", i);
         print_instruction(c, e, 0);
     }
-
+    
     for (int j = 0; j < c->label_count; j++)
     {
         if (c->labels[j] == c->instruction_count)

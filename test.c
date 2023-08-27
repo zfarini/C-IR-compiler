@@ -1,9 +1,11 @@
+#include <stdio.h>
 
-void f()
-{
-}
-
+#include <assert.h>
+    
+    
 int main()
 {
-	f() + 5;
+	unsigned x = 51515;
+
+	printf("%u\n", 0-x);
 }

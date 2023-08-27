@@ -47,7 +47,7 @@ global struct
 	{"!", '!'},
 	{",", ','},
 	{"&", '&'},
-
+    
 	{"end of file", 0},
 	{"unknown", TOKEN_UNKNOWN},
 	{"identifier", TOKEN_IDENTIFIER},
@@ -59,7 +59,7 @@ char *get_token_typename(int type)
 {
 	for (int i = 0; token_typenames[i].name; i++)
 		if (token_typenames[i].type == type)
-			return token_typenames[i].name;
+        return token_typenames[i].name;
 	assert(0);
 	return "UNDEFINED";
 }
@@ -73,7 +73,7 @@ void error_token(Token *token, char *fmt, ...)
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);
     va_end(ap);
-
+    
     fprintf(stderr, "\033[0m\n");
     exit(1);
 }
@@ -98,7 +98,7 @@ Token *tokenize(char *s)
 {
     int 	max_token_count = (int)strlen(s) + 1;
     Token   *tokens = calloc(sizeof(Token), max_token_count);
-
+    
     int     i = 0;
     int     j = 0;
     int     line = 1;
@@ -106,34 +106,34 @@ Token *tokenize(char *s)
     
     while (s[i])
     {
-         // @Speed: a tab might be 4/8 spaces maybe we want something faster
-        while (isspace(s[i]))
-			skip_chars(s, &i, &line, &col, 1);
+        // @Speed: a tab might be 4/8 spaces maybe we want something faster
+        while (isspace(s[i]) || s[i] == '\\')
+            skip_chars(s, &i, &line, &col, 1);
         if (s[i] == '/' && s[i + 1] == '/')
         {
             while (s[i] && s[i] != '\n')
-				skip_chars(s, &i, &line, &col, 1);
+                skip_chars(s, &i, &line, &col, 1);
             continue ;
         }
-		else if (s[i] == '/' && s[i + 1] == '*')
-		{
-			skip_chars(s, &i, &line, &col, 2);
-			while (s[i] && !(s[i] == '*' && s[i + 1] == '/'))
-				skip_chars(s, &i, &line, &col, 1);
-			//TODO: error if not
-			if (s[i] == '*')
-				skip_chars(s, &i, &line, &col, 2);
-			continue ;
-		}
+        else if (s[i] == '/' && s[i + 1] == '*')
+        {
+            skip_chars(s, &i, &line, &col, 2);
+            while (s[i] && !(s[i] == '*' && s[i + 1] == '/'))
+                skip_chars(s, &i, &line, &col, 1);
+            //TODO: error if not
+            if (s[i] == '*')
+                skip_chars(s, &i, &line, &col, 2);
+            continue ;
+        }
         if (!s[i])
             break ;
-
+        
         Token *token = &tokens[j];
         token->type = TOKEN_UNKNOWN;
         token->line = line;
         token->col = col;
         token->c0 = i;
-
+        
         if (isdigit(s[i]))
         {
             token->type = TOKEN_NUMBER;
@@ -148,25 +148,25 @@ Token *tokenize(char *s)
             token->type = TOKEN_IDENTIFIER;
             while (isalnum(s[i]) || s[i] == '_')
                 i++;
-
+            
             token->name = calloc(i - token->c0 + 1, 1);
             memcpy(token->name, s + token->c0, i - token->c0);
-            for (int j = 0; token_typenames[j].name; j++)
+            for (int k = 0; token_typenames[k].name; k++)
             {
-                if (!strcmp(token->name, token_typenames[j].name))
+                if (!strcmp(token->name, token_typenames[k].name))
                 {
-                    token->type = token_typenames[j].type;
+                    token->type = token_typenames[k].type;
                     break ;
                 }
             }
         }
         else {
-            for (int j = 0; token_typenames[j].name; j++)
+            for (int k = 0; token_typenames[k].name; k++)
             {
-                int len = (int)strlen(token_typenames[j].name);
-                if (!strncmp(s + i, token_typenames[j].name, len))
+                int len = (int)strlen(token_typenames[k].name);
+                if (!strncmp(s + i, token_typenames[k].name, len))
                 {
-                    token->type = token_typenames[j].type;
+                    token->type = token_typenames[k].type;
                     i += len;
                     break ;
                 }
@@ -175,7 +175,7 @@ Token *tokenize(char *s)
             if (token->type == TOKEN_UNKNOWN)
                 error_token(token, "unkown token '%c' (ascii %d)", s[i], s[i]);
         }
-
+        
         token->c1 = i;
         j++;
         col += token->c1 - token->c0;
@@ -183,6 +183,6 @@ Token *tokenize(char *s)
     
     assert(j < max_token_count);
     tokens[j].c0 = i;
-
+    
     return (tokens);
 }

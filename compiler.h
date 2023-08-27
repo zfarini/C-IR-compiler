@@ -1,16 +1,24 @@
 #ifndef COMPILER_H
 #define COMPILER_H
 
+#define _CRT_SECURE_NO_WARNINGS 1
+
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <assert.h>
+#ifndef _WIN32
 #include <pthread.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <sys/wait.h>
+#endif
 #include <stdarg.h>
 #include <stdint.h>
 #include <inttypes.h>
+
+
 
 #define array_length(arr) ((int)(sizeof(arr) / sizeof(*arr)))
 
@@ -22,7 +30,7 @@ typedef enum
 {
     TOKEN_NUMBER = 256,
     TOKEN_IDENTIFIER,
-
+    
     TOKEN_BINARY_BEGIN,
     TOKEN_LOGICAL_AND,
     TOKEN_LOGICAL_OR,
@@ -31,12 +39,12 @@ typedef enum
     TOKEN_LESS_OR_EQUAL,
     TOKEN_GREATER_OR_EQUAL,
     TOKEN_BINARY_END,
-
+    
     TOKEN_WHILE,
 	TOKEN_RETURN,
     TOKEN_IF,
     TOKEN_ELSE,
-
+    
 	TOKEN_BEGIN_TYPES,
     TOKEN_INT,
 	TOKEN_CHAR,
@@ -48,11 +56,11 @@ typedef enum
 	TOKEN_UNSIGNED,
 	TOKEN_SIGNED,
 	TOKEN_END_TYPES,
-
+    
     TOKEN_FN,
-
+    
     TOKEN_UNKNOWN,
-
+    
     TOKEN_COUNT
 } TokenType;
 
@@ -115,7 +123,7 @@ struct Node
 {
 	Type	*t;
 	Type	*ret_type;
-
+    
     int     type;
     int     op;
     int     value;
@@ -129,25 +137,25 @@ struct Node
     Node    *else_node;
     Node    *decl;
 	Node	*next_func;
-
-
+    
+    
 	Node	*next_decl;
 	Node	*assign;
-
+    
 	Node	*first_arg;
 	Node	*next_arg;
 	int		arg_count;
 	int		stack_offset;
-
+    
 	int		var_index;
 	int		func_index;
-
+    
 	Node	*function;
 };
 
 typedef struct Scope Scope;
 
- 
+
 struct Scope
 {
     Node    *decls[128];
@@ -164,10 +172,10 @@ typedef struct
     Scope   *curr_scope;
     Scope   *scopes;
     int     scope_count;
-
+    
 	Node	**functions;
 	int	     function_count;
-
+    
 	Type	*types;
 	int 	first_free_type;
 	Node	*curr_func;
@@ -182,19 +190,19 @@ enum
     OP_MOD          = '%',
     OP_LESS         = '<',
     OP_GREATER      = '>',
-
-
+    
+    
     OP_EQUAL = 256,
     OP_LESS_OR_EQUAL,
     OP_GREATER_OR_EQUAL,
     OP_NOT_EQUAL,
     
     OP_BINARY,
-
+    
     OP_NOT,
-
+    
     OP_MOV,
-
+    
     OP_JMP,
     OP_JMPZ,
     OP_PRINT,
@@ -208,7 +216,8 @@ enum
 
 enum RValue_Type
 {
-	U64 = 1, U32, U16, U8, I64, I32, I16, I8
+	U64 = 1, U32, U16, U8, I64, I32, I16, I8,
+    RVALUE_COUNT,
 };
 
 typedef struct RValue {
@@ -246,16 +255,16 @@ typedef struct
 typedef struct
 {
     int op;
-
+    
 	Register r0, r1, r2;
 	int label;
-//    int r0;
-//    int r1;
-//    int r2;
-//
-//    int r1_imm;
-//    int r2_imm;
-//
+    //    int r0;
+    //    int r1;
+    //    int r2;
+    //
+    //    int r1_imm;
+    //    int r2_imm;
+    //
 	Node	*node;
 } IR_Instruction;
 
@@ -281,13 +290,13 @@ typedef struct
 	int				reserved_reg;
     int             *labels;
     int             label_count;
-
+    
 	Function		*functions;
 	int				function_count;
 	Function		*curr_func;
-
+    
 	Node			*curr_node;
-
+    
 	Register		*vars_reg;
 	int				var_count;
 	int				func_index;

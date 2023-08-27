@@ -1,1 +1,6 @@
 a.out*
+.vscode
+.vs
+*.exe
+*.obj
+*.pdb
