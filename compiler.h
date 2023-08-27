@@ -26,6 +26,41 @@
 #define internal static
 #define local static
 
+typedef float float32;
+typedef double float64;
+
+enum RValue_Type
+{
+	RV_U64 = 1,
+    RV_U32,
+    RV_U16,
+    RV_U8,
+    RV_I64,
+    RV_I32,
+    RV_I16,
+    RV_I8,
+    RV_PTR,
+    RV_F32,
+    RV_F64,
+    RVALUE_COUNT,
+};
+
+typedef struct RValue {
+	union {
+		uint64_t u64;
+		uint32_t u32;
+		uint16_t u16;
+		uint8_t	 u8;
+		int64_t  i64;
+		int32_t  i32;
+		int16_t  i16;
+		int8_t	 i8;
+        float f32;
+        double f64;
+	};
+	int type;
+} RValue;
+
 typedef enum
 {
     TOKEN_NUMBER = 256,
@@ -68,7 +103,7 @@ typedef struct
 {
     int     type;
     char    *name;
-    int     value;
+    RValue  value;
     int     line;
     int     col;
     int     c0;
@@ -124,9 +159,9 @@ struct Node
 	Type	*t;
 	Type	*ret_type;
     
+    RValue value;
     int     type;
     int     op;
-    int     value;
     Node    *body;
     Node    *next_expr;
     Node    *left;
@@ -145,7 +180,8 @@ struct Node
 	Node	*first_arg;
 	Node	*next_arg;
 	int		arg_count;
-	int		stack_offset;
+    uint64_t stack_offset; // NODE_FUNC_DEF
+    uint64_t arg_offset; // NODE_FUNC_CALL
     
 	int		var_index;
 	int		func_index;
@@ -214,26 +250,6 @@ enum
 	OP_CAST,
 };
 
-enum RValue_Type
-{
-	U64 = 1, U32, U16, U8, I64, I32, I16, I8,
-    RVALUE_COUNT,
-};
-
-typedef struct RValue {
-	union {
-		uint64_t u64;
-		uint32_t u32;
-		uint16_t u16;
-		uint8_t	 u8;
-		int64_t  i64;
-		int32_t  i32;
-		int16_t  i16;
-		int8_t	 i8;
-	};
-	int type;
-} RValue;
-
 enum
 {
 	REG_RT,
@@ -278,7 +294,7 @@ typedef struct
 	int					instruction_count;
 	int					label;
 	int					exit_label;
-	int					stack_size;
+    uint64_t stack_size;
 	Control_Flow_Graph *cfg;
 } Function;
 

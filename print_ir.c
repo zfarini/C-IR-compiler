@@ -27,36 +27,12 @@ char *get_ir_op_str(int type)
     return "UNKOWN_OP_STR";
 }
 
-void int_to_str(char *s, int x)
-{
-	assert(x >= 0);
-	int n = x;
-	int len = (x == 0);
-	while (n)
-	{
-		len++;
-		n /= 10;
-	}
-	int i = len - 1;
-	while (i >= 0)
-	{
-		s[i] = x % 10 + '0';
-		x /= 10;
-		i--;
-	}
-}
-
 void get_reg_str(Register r, char *s, int reserved)
 {
 	if (r.imm)
 	{
-		if (r.value.type == I32)
-			sprintf(s, "%d", r.value.i32);
-		else if (r.value.type == U64)
-			sprintf(s, "%"PRIu64, r.value.u64);
-		else
-			assert(0);
-	}
+        sprintf_reg_value(r.value, s);
+    }
 	else if (!r.i) memcpy(s, "rax", 3);
 	else if (r.i == 1) memcpy(s, "rsp", 3);
 	else if (r.i < REG_COUNT)
@@ -64,13 +40,13 @@ void get_reg_str(Register r, char *s, int reserved)
 	else if (r.i >= REG_COUNT && r.i < reserved)
 	{
 		s[0] = 'a';
-		int_to_str(s + 1, r.i - REG_COUNT);
-	}
+        sprintf(s + 1, "%d", r.i - REG_COUNT);
+    }
 	else
 	{
 		s[0] = 't';
-		int_to_str(s + 1, r.i);
-	}
+        sprintf(s + 1, "%d", r.i);
+    }
 }
 
 void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)

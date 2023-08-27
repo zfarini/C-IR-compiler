@@ -137,11 +137,103 @@ Token *tokenize(char *s)
         if (isdigit(s[i]))
         {
             token->type = TOKEN_NUMBER;
-            while (isdigit(s[i]))
+            int base = 10;
+            
+            if (s[i] == '0')
             {
-                token->value = token->value * 10 + (s[i] - '0');
+                i++;
+                if (s[i] == 'x')
+                    base = 16, i++;
+                else if (s[i] == 'b')
+                    base = 2, i++;
+                else if (isdigit(s[i]))
+                    base = 8;
+            }
+            uint64_t value = 0;
+            
+            while (1)
+            {
+                char c = tolower(s[i]);
+                
+                if (!isalnum(c) || !(c - '0' < base || (base == 16 && c >= 'a' && c <= 'f')))
+                    break ;
+                int d = (c >= 'a' ? c - 'a' + 10 : c - '0');
+                value = value * base + d;
                 i++;
             }
+            if (s[i] == '.')
+            {
+                i++;
+                if (base != 10)
+                    error_token(token, "expected base 10 in floating-point number");
+                
+                uint64_t fraction = 0;
+                uint64_t fraction_div = 1;
+                while (isdigit(s[i]))
+                {
+                    fraction = fraction * 10 + (s[i] - '0');
+                    fraction_div *= 10;
+                    i++;
+                }
+                double fvalue = value + (double)fraction / fraction_div;
+                if (s[i] == 'f')
+                {
+                    i++;
+                    token->value.type = RV_F32;
+                    token->value.f32 = fvalue;
+                }
+                else
+                {
+                    token->value.type = RV_F64;
+                    token->value.f64 = fvalue;
+                }
+            }
+            else
+            {
+                int type = RV_I32;
+                // TODO: check this
+                if (value > INT32_MAX && value <= UINT32_MAX)
+                    type = RV_U32;
+                else if (value > UINT32_MAX && value <= INT64_MAX)
+                    type = RV_I64;
+                else
+                    type = RV_U64;
+                
+                int u_suffix = 0;
+                int l_suffix = 0;
+                
+                while (!u_suffix || !l_suffix)
+                {
+                    if (tolower(s[i] == 'u'))
+                    {
+                        i++;
+                        u_suffix = 1;
+                    }
+                    else if (tolower(s[i]) == 'l')
+                    {
+                        i++;
+                        l_suffix = 1;
+                        if (tolower(s[i]) == 'l')
+                            i++;
+                    }
+                    else
+                        break;
+                }
+                if (l_suffix && u_suffix)
+                    type = RV_U64;
+                else if (l_suffix)
+                    type = RV_I64;
+                else if (u_suffix)
+                    type = RV_U32;
+                token->value.type = type;
+                // TODO: is this just token->value.u64 = value? propably not
+                if (type == RV_I32) token->value.i32 = value;
+                else if (type == RV_U32) token->value.u32 = value;
+                else if (type == RV_I64) token->value.i64 = value;
+                else if (type == RV_U64) token->value.u64 = value;
+                else assert(0);
+            }
+            
         }
         else if (isalpha(s[i]) || s[i] == '_')
         {

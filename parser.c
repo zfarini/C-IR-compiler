@@ -11,6 +11,25 @@ Type *type_ushort	= &(Type){.t = SHORT,	.size = 2, .is_unsigned = 1};
 Type *type_uchar	= &(Type){.t = CHAR,	.size = 1, .is_unsigned = 1};
 
 
+Type *register_value_to_ctype(RValue value)
+{
+    Type *t = 0;
+    
+    if (value.type == RV_U64) t = type_ulong;
+    else if (value.type == RV_U32) t = type_uint;
+    else if (value.type == RV_U16) t = type_ushort;
+    else if (value.type == RV_U8) t = type_uchar;
+    else if (value.type == RV_I64) t = type_long;
+    else if (value.type == RV_I32) t = type_int;
+    else if (value.type == RV_I16) t = type_short;
+    else if (value.type == RV_I8) t = type_char;
+    else if (value.type == RV_F32) t = type_float;
+    else if (value.type == RV_F64) t = type_double;
+    else
+        assert(0);
+    return t;
+}
+
 int is_bin_op(int type)
 {
     return (find_char_in_str("+-*/%=<>", type) ||
@@ -34,9 +53,9 @@ Node *make_node(Parser *p, int type)
     
     node->type = type;
     node->token = &p->tokens[p->curr_token];
-    node->value = node->token->value;
     node->op = node->token->type;
 	node->function = p->curr_func;
+    node->value = node->token->value;
     
     return node;
 }
@@ -46,6 +65,7 @@ Type *make_type(Parser *p, int t)
 	Type *type = &p->types[p->first_free_type++];
     
 	type->t = t;
+    
 	if (t == PTR)
 		type->is_unsigned = 1;
 	if (t == LONG || t == PTR || t == DOUBLE)
@@ -462,6 +482,8 @@ Node *parse_atom(Parser *p)
 				else if (get_curr_token(p)->type != ')')
 					error_token(get_curr_token(p), "expected ',' or ')'");
 			}
+            if (node->arg_count != node->decl->arg_count)
+                error_token(node->token, "expected %d arguments but found %d", node->decl->arg_count, node->arg_count);
 			expect_token(p, ')');
         }
         else
@@ -515,7 +537,7 @@ Node *parse_atom(Parser *p)
         skip_token(p);
         node->op = '-';
         node->left = make_node(p, NODE_NUMBER);
-        node->left->value = 0;
+        node->left->value = (RValue){.type = RV_I32, .i32 = 0};
         node->right = parse_atom(p);
     }
 	else if (token->type == '!')
@@ -680,6 +702,11 @@ Type *implicit_cast(Parser *p, Node **node, Type *type)
 
 Type *find_common_type(Type *t1, Type *t2)
 {
+    if (t1->t == DOUBLE || t2->t == DOUBLE)
+        return t1->t == DOUBLE ? t1 : t2;
+    if (t1->t == FLOAT || t2->t == FLOAT)
+        return t1->t == FLOAT ? t1 : t2;
+    
 	if (t1->ptr_to)
 		return t1;
 	if (t2->ptr_to)
@@ -723,17 +750,40 @@ Type *add_type(Parser *p, Node *node)
 	}
 	else if (node->type == NODE_FUNC_CALL)
 	{
+        Node *curr_param = node->decl->first_arg;
 		Node *curr = node->first_arg;
+        Node *prev = 0;
+        
 		while (curr)
 		{
-			add_type(p, curr);
+            add_type(p, curr);
+            
+            if (!types_are_equal(curr->t, curr_param->t))
+            {
+                Node *cast = make_node(p, NODE_CAST);
+                
+                cast->t = curr_param->t;
+                cast->left = curr;
+                cast->next_arg = curr->next_arg;
+                curr->next_arg = 0;
+                if (!prev)
+                    node->first_arg = cast;
+                else
+                    prev->next_arg = cast;
+                curr = cast;
+            }
+            prev = curr;
 			curr = curr->next_arg;
-		}
+            curr_param = curr_param->next_arg;
+        }
+        assert(!curr_param);
 		t = node->decl->ret_type;
 	}
 	else if (node->type == NODE_NUMBER)
-		t = type_int;
-	else if (node->type == NODE_VAR)
+    {
+        t = register_value_to_ctype(node->value);
+    }
+    else if (node->type == NODE_VAR)
 		t = node->decl->t;
 	else if (node->type == NODE_WHILE)
 	{
@@ -755,8 +805,12 @@ Type *add_type(Parser *p, Node *node)
 		}
 	}
 	else if (node->type == NODE_PRINT || node->type == NODE_ASSERT)
+    {
 		add_type(p, node->left);
-	else if (node->type == NODE_BLOCK)
+        if (node->left->t->t == VOID)
+            error_token(node->left->token, "expected a number");
+    }
+    else if (node->type == NODE_BLOCK)
 	{
 		Node *curr = node->first_stmt;
 		while (curr)

@@ -163,6 +163,9 @@ int main(int argc, char **argv)
 	}
 	else if (argc > 1)
 		filename = argv[1];
+#else
+    if (argc > 1)
+        filename = argv[1];
 #endif
     char *s = load_entire_file(filename);
     Token *tokens = tokenize(s);

@@ -27,7 +27,7 @@ int fib_itr(int n)
 	int a = 0;
 	int b = 1;
 	int c;
-
+    
 	while (n)
 	{
 		c = a + b;
@@ -44,7 +44,7 @@ int test(int a, int b, int c)
 	int e;
 	int f;
 	int	r;
-
+    
 	r = 5;
 	d = a;
 	e = b;
@@ -60,10 +60,9 @@ int test(int a, int b, int c)
 
 void main()
 {
-	print add(1, 2);
 	assert add(1, 2) == 3;
 	assert add(add(1, 2), add(1, 2)) == 6;
-	assert add(add(1, add(1, 1)), add(add(0, 1), add(1, 1))) == 6;
+	assert add(add(1, add(1, 1)), add(add(0, 1), 4)) == 8;
 	assert mul2(5) == 10;
 	assert mul2(mul2(add(mul2(5), 4))) == (2 * 5 + 4) * 2 * 2;
 	assert factorial(5) == 120;
@@ -77,6 +76,6 @@ void main()
 		}
 	}
 	assert fib(fib(7)) == fib_itr(fib_itr(7));
-
+    
 	test(add(1, 2), 3, 4);
 }
