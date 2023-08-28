@@ -25,6 +25,7 @@ global struct
 	{"double",		TOKEN_DOUBLE},
 	{"return",		TOKEN_RETURN},
 	{"sizeof",		TOKEN_SIZEOF},
+	{"for",			TOKEN_FOR},
 	// operators (sort by length)
     {"==",      TOKEN_EQUAL},
     {"!=",      TOKEN_NOT_EQUAL},

@@ -95,6 +95,7 @@ typedef enum
 	TOKEN_UNSIGNED,
 	TOKEN_SIGNED,
 	TOKEN_END_TYPES,
+	TOKEN_FOR,
     
     TOKEN_FN,
     
@@ -136,6 +137,7 @@ enum NodeType
 	NODE_CAST,
 	NODE_NOT,
 	NODE_SUBSCRIPT,
+	NODE_FOR,
 };
 
 typedef struct Type Type;
@@ -168,7 +170,6 @@ struct Node
     
     RValue value;
     int     type;
-    int     op;
     Node    *body;
     Node    *next_expr;
     Node    *left;
@@ -194,6 +195,10 @@ struct Node
 	int		func_index;
     
 	Node	*function;
+
+	Node	*init;
+	Node	*condition;
+	Node	*increment;
 };
 
 typedef struct Scope Scope;
@@ -248,6 +253,7 @@ enum
     
     OP_JMP,
     OP_JMPZ,
+	OP_JMPNZ, // used only in ||, maybe just remove it?
     OP_PRINT,
     OP_CALL,
     OP_RET,

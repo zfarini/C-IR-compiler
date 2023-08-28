@@ -17,6 +17,7 @@ int get_rvalue_type_from_ctype(Type *t)
 	else if (t->size == 4) return u ? RV_U32 : RV_I32;
 	else if (t->size == 2) return u ? RV_U16 : RV_I16;
 	else if (t->size == 1) return u ? RV_U8  : RV_I8;
+	printf("type: %s\n", get_type_str(t));
 	assert(0);
 	return 0;
 }
@@ -139,6 +140,8 @@ int	sim_ir_code(IR_Code *c)
 		}
 	}
     
+
+
     if (!main)
     {
         printf("SIM ERROR: main is not defined\n");
@@ -152,6 +155,9 @@ int	sim_ir_code(IR_Code *c)
 	uint8_t *stack = malloc(stack_max * sizeof(int));
 	memset(stack, 0xcc, stack_max * sizeof(int));
     
+
+	if (main->decl->ret_type->t != VOID)
+		regs[REG_RT].type = get_rvalue_type_from_ctype(main->decl->ret_type);
 	regs[REG_SP].u64 = (uint64_t)stack;
 	regs[REG_SP].type = RV_U64;
     
@@ -238,6 +244,14 @@ regs[e->r0.i].type = RV_U64; \
                 continue ;
             }
         }
+		else if (e->op == OP_JMPNZ)
+		{
+            if (!is_reg_value_zero(r1_value))
+            {
+                ip = c->labels[e->label];
+                continue ;
+            }
+		}
         else if (e->op == OP_PRINT)
         {
             print_reg_value(r1_value);
@@ -269,6 +283,10 @@ regs[e->r0.i].type = RV_U64; \
             *(uint64_t *)(regs[REG_SP].u64) = ip + 1;
             regs[REG_SP].u64 += sizeof(uint64_t);
             
+			if (c->functions[e->label].decl->ret_type->t != VOID)
+				regs[REG_RT].type = get_rvalue_type_from_ctype(c->functions[e->label].decl->ret_type);
+			regs[REG_RT].u64 = 0;
+
             ip = c->labels[e->label];
             continue ;
         }

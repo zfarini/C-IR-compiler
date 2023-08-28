@@ -190,14 +190,20 @@ Type *add_type(Parser *p, Node *node)
 	}
 	else if (node->type == NODE_WHILE)
 	{
-		add_type(p, node->left);
-		add_type(p, node->right);
+		add_type(p, node->condition);
+		add_type(p, node->body);
 	}
 	else if (node->type == NODE_IF)
 	{
-		add_type(p, node->left);
-		add_type(p, node->right);
+		add_type(p, node->condition);
+		add_type(p, node->body);
 		add_type(p, node->else_node);
+	}
+	else if (node->type == NODE_FOR)
+	{
+		add_type(p, node->condition);
+		add_type(p, node->increment);
+		add_type(p, node->body);
 	}
 	else if (node->type == NODE_RETURN)
 	{

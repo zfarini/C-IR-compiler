@@ -12,7 +12,7 @@ Type *type_uchar	= &(Type){.t = CHAR,	.size = 1, .is_unsigned = 1};
 
 // TODO: change this
 Token *plus_token = &(Token){.type = '+', .line = -1};
-Token *mul_token = &(Token){.type = '*', .line = -1};
+Token *minus_token = &(Token){.type = '-', .line = -1};
 
 
 Type *register_value_to_ctype(RValue value)
@@ -62,7 +62,6 @@ Node *make_node(Parser *p, int type)
     
     node->type = type;
     node->token = &p->tokens[p->curr_token];
-    node->op = node->token->type;
 	node->function = p->curr_func;
     node->value = node->token->value;
     
@@ -114,6 +113,13 @@ Token *expect_token(Parser *p, int type)
 	}
     p->curr_token++;
 	return token;
+}
+
+Token *expect_curr_token(Parser *p, int type)
+{
+	Token *t = expect_token(p, type);
+	p->curr_token--;
+	return t;
 }
 
 Node *parse_function(Parser *p);
@@ -378,6 +384,8 @@ Node *parse_function(Parser *p)
 	{
 		Node *decl = parse_decl(p, 1);
 		
+		if (decl->t->t == ARRAY)
+			decl->t->t = PTR;
 		if (curr == node)
 			node->first_arg = decl;
 		else
@@ -395,8 +403,7 @@ Node *parse_function(Parser *p)
     // read args
 	expect_token(p, ')');
     
-	expect_token(p, '{');
-	p->curr_token--; // we call expect just for the error
+	expect_curr_token(p, '{');
     
     node->body = parse_statement(p);
     
@@ -424,15 +431,36 @@ Node *parse_statement(Parser *p)
     {
         node = make_node(p, NODE_WHILE);
         skip_token(p);
-        node->left = parse_atom(p);
-        node->right = parse_statement(p);
+		expect_curr_token(p, '(');
+        node->condition = parse_atom(p);
+        node->body = parse_statement(p);
     }
+	else if (get_curr_token(p)->type == TOKEN_FOR)
+	{
+		enter_scope(p);
+
+		node = make_node(p, NODE_FOR);
+		skip_token(p);
+		expect_token(p, '(');
+
+		if (get_curr_token(p)->type != ';')
+			node->decl = parse_decl(p, 0);
+		expect_token(p, ';');
+		node->condition = parse_expr(p, 0);
+		expect_token(p, ';');
+		node->increment = parse_expr(p, 0);
+		expect_token(p, ')');
+		node->body = parse_statement(p);
+
+		leave_scope(p);
+	}
     else if (get_curr_token(p)->type == TOKEN_IF)
     {
         node = make_node(p, NODE_IF);
         skip_token(p);
-        node->left = parse_atom(p);
-        node->right = parse_statement(p);
+		expect_curr_token(p, '(');
+        node->condition = parse_atom(p);
+        node->body = parse_statement(p);
         
         if (get_curr_token(p)->type == TOKEN_ELSE)
         {
@@ -587,7 +615,7 @@ Node *parse_atom(Parser *p)
     {
         node = make_node(p, NODE_BINOP);
         skip_token(p);
-        node->op = '-';
+		node->token = minus_token;
         node->left = make_node(p, NODE_NUMBER);
         node->left->value = (RValue){.type = RV_I32, .i32 = 0};
         node->right = parse_atom(p);
@@ -629,7 +657,6 @@ Node *parse_atom(Parser *p)
 	if (get_curr_token(p)->type == '[')
 	{
 		// (e1)[e2] = *(e1 + (e2) * sizeof(*e1))
-
 		Node *new = make_node(p, NODE_DEREF);
 
 		skip_token(p);
@@ -637,7 +664,6 @@ Node *parse_atom(Parser *p)
 		add_type(p, node);
 		if (!node->t->ptr_to)
 			error_token(node->token, "subscripted value is neither array nor pointer");
-		//TODO: check if "e2" is a integer
 
 		Node *expr = parse_expr(p, 0);
 		add_type(p, expr);

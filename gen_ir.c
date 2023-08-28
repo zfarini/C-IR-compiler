@@ -92,11 +92,16 @@ int alloc_size_aligned(IR_Code *c, int size)
 
 Register gen_ir(IR_Code *c, Node *node)
 {
+
     Register reg = {0};
     
 	reg.i = -1;
     
-	c->curr_node = node;
+
+	if (!node)
+		return reg;
+
+	c->curr_node = node; // this doesn't really work we should have more like a stack
     if (node->type == NODE_NUMBER)
     {
         IR_Instruction *e = add_instruction(c, OP_MOV);
@@ -231,7 +236,7 @@ Register gen_ir(IR_Code *c, Node *node)
 			curr = curr->next_decl;
 		}
     }
-    else if (node->type == NODE_BINOP && node->op == '=')
+    else if (node->type == NODE_BINOP && node->token->type == '=')
     {
         Register r1 = gen_ir(c, node->right);
         
@@ -270,6 +275,43 @@ Register gen_ir(IR_Code *c, Node *node)
         	reg = vr;
 		}
     }
+	else if (node->type == NODE_BINOP && 
+			(node->token->type == TOKEN_LOGICAL_AND ||
+			 node->token->type == TOKEN_LOGICAL_OR))
+	{
+		// A && B
+		int is_and = node->token->type == TOKEN_LOGICAL_AND;
+
+		Register r = alloc_register(c, type_int);
+
+		{
+			IR_Instruction *e = add_instruction(c, OP_MOV);
+			e->r0 = r;
+			e->r1 = alloc_register_value(c, (RValue){.type = RV_I32, .i32 = !is_and});
+		}
+
+		Register r1 = gen_ir(c, node->left);
+		
+		IR_Instruction *e1 = add_instruction(c, is_and ? OP_JMPZ : OP_JMPNZ);
+		e1->r1 = r1;
+		
+		Register r2 = gen_ir(c, node->right);
+
+		IR_Instruction *e2 = add_instruction(c, is_and ? OP_JMPZ : OP_JMPNZ);
+		e2->r1 = r2;	
+
+		IR_Instruction *e3 = add_instruction(c, OP_MOV);
+		e3->r0 = r;
+		e3->r1 = alloc_register_value(c, (RValue){.type = RV_I32, .i32 = is_and});
+
+		int end_label = c->label_count++;
+		c->labels[end_label] = c->instruction_count;
+		
+		e1->label = end_label;
+		e2->label = end_label;
+
+		reg = r;
+	}
     else if (node->type == NODE_BINOP)
     {
         Register r1 = gen_ir(c, node->left);
@@ -441,18 +483,14 @@ Register gen_ir(IR_Code *c, Node *node)
         e->r1.type = node->decl->ret_type;
 		reg = e->r0;
     }
-    else if (node->type == NODE_WHILE || node->type == NODE_IF)
+    else if (node->type == NODE_IF)
     {
-        int start_label = c->label_count;
-        if (node->type == NODE_WHILE)
-            c->labels[c->label_count++] = c->instruction_count;
-        
-        Register r0 = gen_ir(c, node->left);
+        Register r0 = gen_ir(c, node->condition);
         
         IR_Instruction *e = add_instruction(c, OP_JMPZ);
         e->r1 = r0;
         
-        gen_ir(c, node->right);
+        gen_ir(c, node->body);
         
         IR_Instruction *f = 0;
         int exit_label;
@@ -465,8 +503,6 @@ Register gen_ir(IR_Code *c, Node *node)
             c->labels[else_label] = c->instruction_count;
             gen_ir(c, node->else_node);
         }
-        else if (node->type == NODE_WHILE)
-            add_instruction(c, OP_JMP)->label = start_label;
         
         exit_label = c->label_count++;
         c->labels[exit_label] = c->instruction_count;
@@ -475,6 +511,28 @@ Register gen_ir(IR_Code *c, Node *node)
         if (f)
             f->label = exit_label;
     }
+	else if (node->type == NODE_FOR || node->type == NODE_WHILE)
+	{
+		if (node->type == NODE_WHILE)
+			assert(!node->decl && !node->increment);
+		gen_ir(c, node->decl);
+
+		int start_label = c->label_count++;
+		c->labels[start_label] = c->instruction_count;
+
+		Register r0 = gen_ir(c, node->condition);
+
+		IR_Instruction *e = add_instruction(c, OP_JMPZ);
+		e->r1 = r0;
+
+		gen_ir(c, node->body);
+		gen_ir(c, node->increment);
+		
+		add_instruction(c, OP_JMP)->label = start_label;
+
+		e->label = c->label_count;
+		c->labels[c->label_count++] = c->instruction_count;
+	}
     else if (node->type == NODE_BLOCK)
     {
         Node *curr = node->first_stmt;

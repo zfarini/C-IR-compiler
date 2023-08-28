@@ -63,6 +63,8 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
         printf("jmp %s%d", (in_block ? "B" : "L"), e->label);
     else if (e->op == OP_JMPZ)
         printf("jmpz %s%d %s", (in_block ? "B" : "L"), e->label, r1);
+	else if (e->op == OP_JMPNZ)
+		printf("jmpnz %s%d %s", (in_block ? "B" : "L"), e->label, r1);
     else if (e->op == OP_PRINT)
         printf("print %s", r1);
 	else if (e->op == OP_ASSERT)

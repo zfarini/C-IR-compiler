@@ -1,13 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+int *func(short arr[5])
+{
+	printf("%u\n", sizeof(arr));
+	return arr;
+}
 
 int main()
 {
-	int a[2];
-
-
-	a[0];
-
-	//(e1)[e2] -> (e1) + (e2) * sizeof(*e1)
+	int a[7];
+	func(a);
 }

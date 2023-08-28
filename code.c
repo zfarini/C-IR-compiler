@@ -1,23 +1,19 @@
-void f() {}
-
-
-
-// TODO: function that takes an array???
+int bad()
+{
+	assert 0;	
+}
 
 int main()
 {
-	int a[4];
 
-	int i = 0;
-	while (i < 4)
-	{
-		a[i] = i * 2 + 1;
-		i = i + 1;
-	}
-	i = 0;
-	while (i < 4)
-	{
-		print *(a + i);
-		i = i + 1;
-	}
+	assert (1 && 1);
+	assert (1 && 0) == 0;
+	assert  (0 && bad()) == 0;
+	assert (0 && 0) == 0;
+
+	assert (1 || 1);
+	assert (0 || 0) == 0;
+	assert (1 || bad()) == 1;
+	assert (0 || 1) == 1;
 }
+
