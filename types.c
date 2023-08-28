@@ -213,7 +213,19 @@ Type *add_type(Parser *p, Node *node)
 			implicit_cast(p, &node->left, node->function->ret_type);
 		}
 	}
-	else if (node->type == NODE_PRINT || node->type == NODE_ASSERT)
+	else if (node->type == NODE_PRINT)
+	{
+		Node *curr = node->first_arg;
+
+		while (curr)
+		{
+			add_type(p, curr);
+			if (curr->t->t == VOID)
+				error_token(curr->token, "expected a number");
+			curr = curr->next_arg;
+		}
+	}
+	else if (node->type == NODE_ASSERT)
     {
 		add_type(p, node->left);
         if (node->left->t->t == VOID)

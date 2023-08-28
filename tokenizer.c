@@ -171,15 +171,9 @@ Token *tokenize(char *s)
                 if (base != 10)
                     error_token(token, "expected base 10 in floating-point number");
                 
-                uint64_t fraction = 0;
-                uint64_t fraction_div = 1;
                 while (isdigit(s[i]))
-                {
-                    fraction = fraction * 10 + (s[i] - '0');
-                    fraction_div *= 10;
                     i++;
-                }
-                double fvalue = value + (double)fraction / fraction_div;
+                double fvalue = atof(s + token->c0);
                 if (s[i] == 'f')
                 {
                     i++;
@@ -191,6 +185,7 @@ Token *tokenize(char *s)
                     token->value.type = RV_F64;
                     token->value.f64 = fvalue;
                 }
+				//printf("line %d: %.20lf\n", line, fvalue);
             }
             else
             {

@@ -256,9 +256,8 @@ regs[e->r0.i].type = RV_U64; \
         {
             print_reg_value(r1_value);
             
-            printf("\n");
+ //           printf("\n");
             //printf("line:%d: 0x%"PRIx64"\n", e->node->token->, r1_value.u64);
-            
         }
         else if (e->op == OP_ASSERT)
         {

@@ -411,6 +411,36 @@ Node *parse_function(Parser *p)
     return node;
 }
 
+Node *parse_function_args(Parser *p, Node *node)
+{
+	expect_token(p, '(');
+
+	Node *curr = node;
+        
+	// very similar to parse_function
+	while (get_curr_token(p)->type != ')' &&
+           get_curr_token(p)->type)
+	{
+		Node *arg = parse_expr(p, 0);
+        
+		if (curr == node)
+			node->first_arg = arg;
+		else
+			curr->next_arg = arg;
+		curr = arg;
+        
+		node->arg_count++;
+        
+		if (get_curr_token(p)->type == ',')
+			skip_token(p);
+		else if (get_curr_token(p)->type != ')')
+			error_token(get_curr_token(p), "expected ',' or ')'");
+	}
+	expect_token(p, ')');
+
+	return node->first_arg;
+}
+
 Node *parse_statement(Parser *p)
 {
     Node *node = 0;
@@ -496,7 +526,7 @@ Node *parse_statement(Parser *p)
         node = make_node(p, NODE_PRINT);
         skip_token(p);
         
-        node->left = parse_expr(p, 0);
+		parse_function_args(p, node);
 		expect_token(p, ';');
     }
     else if (get_curr_token(p)->type == TOKEN_IDENTIFIER &&
@@ -538,33 +568,11 @@ Node *parse_atom(Parser *p)
 			node->decl = find_function_decl(p, node->token->name);
 			if (!node->decl)
 				error_token(node->token, "undeclared function `%s`", node->token->name);
-            
-            skip_token(p);
-            
-			Node *curr = node;
-            
-			// very similar to parse_function
-			while (get_curr_token(p)->type != ')' &&
-                   get_curr_token(p)->type)
-			{
-				Node *arg = parse_expr(p, 0);
-                
-				if (curr == node)
-					node->first_arg = arg;
-				else
-					curr->next_arg = arg;
-				curr = arg;
-                
-				node->arg_count++;
-                
-				if (get_curr_token(p)->type == ',')
-					skip_token(p);
-				else if (get_curr_token(p)->type != ')')
-					error_token(get_curr_token(p), "expected ',' or ')'");
-			}
-            if (node->arg_count != node->decl->arg_count)
+
+			parse_function_args(p, node);
+
+			if (node->arg_count != node->decl->arg_count)
                 error_token(node->token, "expected %d arguments but found %d", node->decl->arg_count, node->arg_count);
-			expect_token(p, ')');
         }
         else
         {

@@ -185,7 +185,7 @@ int main(int argc, char **argv)
     
     IR_Code *c = gen_ir_code(node);
     
-    print_ir_code(c);
+    //print_ir_code(c);
 	
     sim_ir_code(c);
 	

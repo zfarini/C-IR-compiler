@@ -383,6 +383,9 @@ Register gen_ir(IR_Code *c, Node *node)
 		}
         
         gen_ir(c, node->body);
+
+		c->curr_func->stack_size = align_to_size(c->curr_func->stack_size, 16);
+
 		// exit stuff
 		c->labels[f->exit_label] = c->instruction_count;
 		{
@@ -401,6 +404,7 @@ Register gen_ir(IR_Code *c, Node *node)
     }
     else if (node->type == NODE_FUNC_CALL)
     {
+
 		int	i;
         
         Node *arg = node->first_arg;
@@ -462,6 +466,7 @@ Register gen_ir(IR_Code *c, Node *node)
 		}
 		// 4
 		Function *f = find_function(c, node);
+
         IR_Instruction *e = add_instruction(c, OP_CALL);
 		e->label = f->label;
 		// 5
@@ -545,10 +550,14 @@ Register gen_ir(IR_Code *c, Node *node)
     }
 	else if (node->type == NODE_PRINT)
     {
-        Register r = gen_ir(c, node->left);
-        
-        IR_Instruction *e = add_instruction(c, OP_PRINT);
-        e->r1 = r;
+		Node *curr = node->first_arg;
+
+		while (curr)
+		{
+			Register r = gen_ir(c, curr);
+			add_instruction(c, OP_PRINT)->r1 = r;
+			curr = curr->next_arg;
+		}
     }
 	else if (node->type == NODE_ASSERT)
 	{
