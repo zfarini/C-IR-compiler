@@ -10,6 +10,10 @@ Type *type_uint		= &(Type){.t = INT,		.size = 4, .is_unsigned = 1};
 Type *type_ushort	= &(Type){.t = SHORT,	.size = 2, .is_unsigned = 1};
 Type *type_uchar	= &(Type){.t = CHAR,	.size = 1, .is_unsigned = 1};
 
+// TODO: change this
+Token *plus_token = &(Token){.type = '+', .line = -1};
+Token *mul_token = &(Token){.type = '*', .line = -1};
+
 
 Type *register_value_to_ctype(RValue value)
 {
@@ -45,6 +49,11 @@ int is_node_lvalue(Node *node)
 int is_typename(int type)
 {
 	return type > TOKEN_BEGIN_TYPES && type < TOKEN_END_TYPES;
+}
+
+int is_type_integer(Type *t)
+{
+	return (t->t == INT || t->t == CHAR || t->t == SHORT || t->t == LONG);
 }
 
 Node *make_node(Parser *p, int type)
@@ -253,7 +262,7 @@ Type *parse_type(Parser *p)
     return res;
 }
 
-Node *parse_decl(Parser *p, int multiple_decls, int allow_assign)
+Node *parse_decl(Parser *p, int in_function)
 {
 	Type *base_type = parse_base_type(p);
     
@@ -279,7 +288,8 @@ Node *parse_decl(Parser *p, int multiple_decls, int allow_assign)
 			t = new;
             
 			skip_token(p);
-		}
+		}	
+
 		curr->next_decl = make_node(p, NODE_VAR_DECL);
 		curr = curr->next_decl;
 		curr->decl = node;
@@ -295,12 +305,38 @@ Node *parse_decl(Parser *p, int multiple_decls, int allow_assign)
         
 		expect_token(p, TOKEN_IDENTIFIER);
         
-		if (!multiple_decls)
+		if (get_curr_token(p)->type == '[')
+		{
+			//!!!!!!!!!!!!!!!!!!!!!!!!!!1
+			//if you want to add multi dimension arrays check a comment about them in gen_ir
+			skip_token(p);
+			Token *length = expect_token(p, TOKEN_NUMBER);
+			if (length->value.type == RV_F32 || length->value.type == RV_F64)
+				error_token(length, "expected an integer for array length");
+
+			Type *arr = &p->types[p->first_free_type++];
+			arr->t = ARRAY;
+			arr->is_unsigned = 1;
+			arr->size = 8;
+			arr->ptr_to = t;
+
+			// TODO: I really don't like doing this all over
+			if (length->value.type == RV_U64) 	   arr->length = length->value.u64;
+			else if (length->value.type == RV_U32) arr->length = length->value.u32;
+			else if (length->value.type == RV_I64) arr->length = length->value.i64;
+			else if (length->value.type == RV_I32) arr->length = length->value.i32;
+			else assert(0);
+
+			expect_token(p, ']');
+			curr->t = arr;
+		}
+
+		if (in_function)
 		{
 			node = curr;
 			break ;
 		}
-		if (allow_assign && get_curr_token(p)->type == '=')
+		if (get_curr_token(p)->type == '=')
 		{
 			skip_token(p);
 			curr->assign = parse_expr(p, 0);
@@ -340,7 +376,7 @@ Node *parse_function(Parser *p)
 	while (get_curr_token(p)->type != ')' 
            && get_curr_token(p)->type)
 	{
-		Node *decl = parse_decl(p, 0, 0);
+		Node *decl = parse_decl(p, 1);
 		
 		if (curr == node)
 			node->first_arg = decl;
@@ -374,7 +410,7 @@ Node *parse_statement(Parser *p)
     
 	if (is_typename(get_curr_token(p)->type))
 	{
-		node = parse_decl(p, 1, 1);
+		node = parse_decl(p, 0);
 		expect_token(p, ';');
 	}
 	else if (get_curr_token(p)->type == TOKEN_RETURN)
@@ -568,23 +604,56 @@ Node *parse_atom(Parser *p)
 		node->value.type = RV_U32;
 		skip_token(p);
 
-		if (get_curr_token(p)->type == '(')
+		if (get_curr_token(p)->type == '('
+				&& is_typename(p->tokens[p->curr_token + 1].type))
 		{
-			if (is_typename(p->tokens[p->curr_token + 1].type))
-			{
-				skip_token(p);
-				node->value.u32 = parse_type(p)->size;
-				expect_token(p, ')');
-			}
-			else
-				node->value.u32 = add_type(p, parse_atom(p))->size;
+			skip_token(p);
+			node->value.u32 = parse_type(p)->size;
+			expect_token(p, ')');
 		}
 		else
-			node->value.u32 = add_type(p, parse_atom(p))->size;
+		{
+			Node *e = parse_atom(p);
+
+			if (e->type == NODE_VAR && e->decl->t->t == ARRAY)
+				node->value.u32 = e->decl->t->length * e->decl->t->ptr_to->size;
+			else
+				node->value.u32 = add_type(p, e)->size;
+		}
 	}
     else
+	{
         error_token(get_curr_token(p), "expected an expression");
-    return (node);
+	}
+
+	if (get_curr_token(p)->type == '[')
+	{
+		// (e1)[e2] = *(e1 + (e2) * sizeof(*e1))
+
+		Node *new = make_node(p, NODE_DEREF);
+
+		skip_token(p);
+
+		add_type(p, node);
+		if (!node->t->ptr_to)
+			error_token(node->token, "subscripted value is neither array nor pointer");
+		//TODO: check if "e2" is a integer
+
+		Node *expr = parse_expr(p, 0);
+		add_type(p, expr);
+		if (!is_type_integer(expr->t))
+			error_token(new->token, "expected an integer");
+
+		new->left = make_node(p, NODE_BINOP);
+		new->left->token = plus_token;
+		new->left->left = node;
+		new->left->right = expr;
+		
+		expect_token(p, ']');
+		node = new;
+	}
+
+    return node;
 }
 
 /*
@@ -644,300 +713,12 @@ Node *parse_expr(Parser *p, int min_prec)
         skip_token(p);
         node->right = parse_expr(p, next_prec);
         
-		if (node->token->type == '=' && !is_node_lvalue(node->left))
+		if (node->token->type == '=' && (!is_node_lvalue(node->left)
+			|| (node->left->type == NODE_VAR && node->left->decl->t->t == ARRAY)))
 			error_token(node->left->token, "expected an lvalue");
         res = node;
     }
     
     return (res);
-}
-
-char *get_type_str(Type *type)
-{
-	
-	Type *base = type;
-	int redir_count = 0;
-	if (type->ptr_to)
-	{
-		while (base->ptr_to)
-		{
-			base = base->ptr_to;
-			redir_count++;
-		}
-	}
-    
-	char *str = 0;
-    
-	if		(base->t == VOID)		str = "void";
-	else if (base->t == CHAR)		str = "char";
-	else if (base->t == INT)		str = "int";
-	else if (base->t == SHORT)		str = "short";
-	else if (base->t == LONG)		str = "long";
-	else if (base->t == DOUBLE)		str = "double";
-	else if (base->t == FLOAT)		str = "float";
-	else
-		assert(0);
-    
-	if (base->is_unsigned)
-	{
-		char *new = calloc(strlen(str) + 10, 1);
-		memcpy(new, "unsigned ", 9);
-		memcpy(new + 9, str, strlen(str));
-		str = new;
-	}
-	if (redir_count)
-	{
-		int l = (int)strlen(str);
-        
-		char *new = calloc(l + redir_count + 2, 1);
-		memcpy(new, str, l);
-		new[l] = ' ';
-		for (int j = 0; j < redir_count; j++)
-			new[l + j + 1] = '*';
-		if (base->is_unsigned)
-			free(str);
-		str = new;
-	}
-    
-	return str;
-}
-
-int types_are_equal(Type *t1, Type *t2)
-{
-	if (!t1 || !t2)
-		return (0);
-	if (t1 == t2)
-		return 1;
-	if (t1->is_unsigned != t2->is_unsigned)
-		return 0;
-	if (t1->t != t2->t)
-		return 0;
-	if (!t1->ptr_to)
-		return (t2->ptr_to == 0);
-	return types_are_equal(t1->ptr_to, t2->ptr_to);
-}
-
-int is_castable(Type *from, Type *to)
-{
-	if (from->t == VOID && to->t != VOID)
-		return 0;
-	return 1;
-}
-
-Type *implicit_cast(Parser *p, Node **node, Type *type)
-{
-	assert(*node);
-	assert((*node)->t);
-	//add_type(p, *node);
-	if (types_are_equal(type, (*node)->t))
-		return type;
-	if (!is_castable((*node)->t, type))
-		error_token((*node)->token, "cannot cast from '%s' to '%s'",
-					get_type_str((*node)->t), get_type_str(type));
-	// TODO: check if its castable
-	// return in a void function?
-	Node *cast = make_node(p, NODE_CAST);
-	cast->left = *node;
-	cast->t = type;
-	*node = cast;
-	return type;
-}
-
-Type *find_common_type(Type *t1, Type *t2)
-{
-	if (t1->t == DOUBLE || t2->t == DOUBLE)
-		return t1->t == DOUBLE ? t1 : t2;
-	if (t1->t == FLOAT || t2->t == FLOAT)
-		return t1->t == FLOAT ? t1 : t2;
-	if (t1->ptr_to)
-		return t1;
-	if (t2->ptr_to)
-		return t2;
-	if (t1->size < 4)
-		t1 = type_int;
-	if (t2->size < 4)
-		t2 = type_int;
-	if (t1->size != t2->size)
-		return(t1->size < t2->size) ? t2 : t1;
-	return t2->is_unsigned ? t2 : t1;
-}
-
-Type *add_type(Parser *p, Node *node)
-{
-	Type *t = type_void;
-	
-	if (!node)
-		return 0;
-	if (node->type == NODE_CAST)
-	{
-		Type *t1 = add_type(p, node->left);
-
-		if (!is_castable(t1, node->t))
-			error_token(node->left->token, "cannot cast from '%s' to '%s'",
-					get_type_str(t1), get_type_str(node->t));
-	}
-	else if (node->type == NODE_VARS_DECL)
-	{
-		Node *curr = node->next_decl;
-		while (curr)
-		{
-			if (curr->assign)
-			{
-				add_type(p, curr->assign);
-				implicit_cast(p, &curr->assign, curr->t);
-			}
-			curr = curr->next_decl;
-		}
-	}
-	if (node->t)
-		t = node->t;	
-	else if (node->type == NODE_FUNC_DEF)
-	{
-		add_type(p, node->body);
-		// TODO: return function type
-	}
-	else if (node->type == NODE_FUNC_CALL)
-	{
-        Node *curr_param = node->decl->first_arg;
-		Node *curr = node->first_arg;
-        Node *prev = 0;
-        
-		while (curr)
-		{
-            add_type(p, curr);
-            
-            if (!types_are_equal(curr->t, curr_param->t))
-            {
-                Node *cast = make_node(p, NODE_CAST);
-                
-                cast->t = curr_param->t;
-                cast->left = curr;
-                cast->next_arg = curr->next_arg;
-                curr->next_arg = 0;
-                if (!prev)
-                    node->first_arg = cast;
-                else
-                    prev->next_arg = cast;
-                curr = cast;
-            }
-            prev = curr;
-			curr = curr->next_arg;
-            curr_param = curr_param->next_arg;
-        }
-        assert(!curr_param);
-		t = node->decl->ret_type;
-	}
-	else if (node->type == NODE_NUMBER)
-    {
-        t = register_value_to_ctype(node->value);
-    }
-    else if (node->type == NODE_VAR)
-		t = node->decl->t;
-	else if (node->type == NODE_WHILE)
-	{
-		add_type(p, node->left);
-		add_type(p, node->right);
-	}
-	else if (node->type == NODE_IF)
-	{
-		add_type(p, node->left);
-		add_type(p, node->right);
-		add_type(p, node->else_node);
-	}
-	else if (node->type == NODE_RETURN)
-	{
-		if (node->left)
-		{
-			add_type(p, node->left);
-			implicit_cast(p, &node->left, node->function->ret_type);
-		}
-	}
-	else if (node->type == NODE_PRINT || node->type == NODE_ASSERT)
-    {
-		add_type(p, node->left);
-        if (node->left->t->t == VOID)
-            error_token(node->left->token, "expected a number");
-    }
-    else if (node->type == NODE_BLOCK)
-	{
-		Node *curr = node->first_stmt;
-		while (curr)
-		{
-			add_type(p, curr);
-			curr = curr->next_stmt;
-		}
-	}
-	else if (node->type == NODE_BINOP && node->token->type == '=')
-	{
-		t = add_type(p, node->left);
-        add_type(p, node->right);
-		implicit_cast(p, &node->right, t);
-    }
-	else if (node->type == NODE_BINOP)
-	{
-		Type *t1 = add_type(p, node->left);
-		Type *t2 = add_type(p, node->right);
-        
-		if (t1->t == VOID || t2->t == VOID)
-		{
-			error_token(t1->t == VOID ? node->left->token
-                        : node->right->token, "`void` type in binary expression `%s`", get_token_typename(node->token->type));
-		}
-		int tt = node->token->type;
-        
-		if (t1->ptr_to || t2->ptr_to)
-		{
-			if ((tt == '*' || tt == '/' || tt == '%') || (!t1->ptr_to && tt == '-')
-				|| (t1->ptr_to && t2->ptr_to && tt == '+') 
-				|| (t1->ptr_to && t2->ptr_to && tt == '-' && t1->ptr_to->size != t2->ptr_to->size)
-                || (t1->ptr_to && (t2->t == FLOAT || t2->t == DOUBLE || !t1->ptr_to->size))
-                || (t2->ptr_to && (t1->t == FLOAT || t1->t == DOUBLE
-                                   || !t2->ptr_to->size)))
-				error_token(node->token, "invalid operands to binary expression `%s` ('%s' and '%s')", get_token_typename(node->token->type), get_type_str(t1), get_type_str(t2));
-			if (t1->ptr_to && !t2->ptr_to && (tt == '+' || tt == '-'))
-				t = t1;
-			else if (t2->ptr_to && !t1->ptr_to && tt == '+')
-				t = t2;
-			else
-				t = type_int;
-		}
-		else
-		{
-			Type *ct = find_common_type(t1, t2);
-			implicit_cast(p, &node->left, ct);
-			implicit_cast(p, &node->right, ct);
-			if (tt == '+' || tt == '-' || tt == '*' || tt == '/' || tt == '%')
-				t = ct;
-			else
-            {
-                t = type_int;
-            }
-        }
-	}
-	else if (node->type == NODE_DEREF)
-	{
-		t = add_type(p, node->left);
-		if (!t->ptr_to)
-			error_token(node->token, "derefrencing a non-pointer");
-		if (t->ptr_to->t == VOID)
-			error_token(node->token, "derefrencing a void pointer");
-		t = t->ptr_to;
-	}
-	else if (node->type == NODE_ADDR)
-	{
-		t = make_type(p, PTR);
-		t->ptr_to = add_type(p, node->left);
-		if (t->ptr_to->t == VOID)
-			assert(0);
-	}
-	else if (node->type == NODE_NOT)
-	{
-		add_type(p, node->left);
-		t = type_int; // TODO: 
-	}
-	else
-		assert(0);
-    node->t = t;
-    return t;
 }
 

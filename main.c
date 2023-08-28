@@ -13,6 +13,7 @@ char *find_char_in_str(char *s, char c)
 
 #include "tokenizer.c"
 #include "parser.c"
+#include "types.c"
 #include "gen_ir.c"
 #include "sim_ir.c"
 #include "print_ir.c"

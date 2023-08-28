@@ -48,6 +48,8 @@ global struct
 	{"!", '!'},
 	{",", ','},
 	{"&", '&'},
+	{"[", '['},
+	{"]", ']'},
     
 	{"end of file", 0},
 	{"unknown", TOKEN_UNKNOWN},

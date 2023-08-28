@@ -135,6 +135,7 @@ enum NodeType
 	NODE_ADDR,
 	NODE_CAST,
 	NODE_NOT,
+	NODE_SUBSCRIPT,
 };
 
 typedef struct Type Type;
@@ -148,13 +149,15 @@ enum {
 	LONG,
 	FLOAT,
 	DOUBLE,
+	ARRAY,
 };
 
 struct Type
 {
 	int	t;
-	int	size;
 	int	is_unsigned;
+	uint64_t	size;
+	uint64_t length;
 	Type *ptr_to;
 };
 

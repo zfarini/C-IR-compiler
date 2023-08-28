@@ -109,17 +109,38 @@ Register gen_ir(IR_Code *c, Node *node)
     {
         reg = get_var_register(c, node->decl);
         
-		IR_Instruction *e = add_instruction(c, OP_LOAD);
-        
-		e->r1 = alloc_register_value(c, (RValue){.type = RV_U64, .u64 = node->decl->stack_offset});
-		e->r2 = reg;
+		if (node->decl->t->t == ARRAY)
+		{
+			//TODO: exact code as NODE_ADDR (&a)
+			IR_Instruction *e = add_instruction(c, OP_SUB);
+			e->r0 = reg;
+			e->r1.i = REG_SP;
+			e->r1.type = type_ulong;
+			e->r2 = alloc_register_value(c, (RValue){.type = RV_U64, .u64 = node->decl->stack_offset});
+			IR_Instruction *f = add_instruction(c, OP_CAST);
+			f->r0 = alloc_register(c, node->t);
+			f->r1 = e->r0;
+			reg = f->r0;
+		}
+		else
+		{
+			IR_Instruction *e = add_instruction(c, OP_LOAD);
+        	
+			e->r1 = alloc_register_value(c, (RValue){.type = RV_U64, .u64 = node->decl->stack_offset});
+			e->r2 = reg;
+		}
     }
 	else if (node->type == NODE_DEREF)
 	{
 		Register r;
         
 		if (node->left->type == NODE_VAR)
-			r = get_var_register(c, node->left->decl);
+		{
+			if (node->left->decl->t->t == ARRAY)
+				r = gen_ir(c, node->left);
+			else
+				r = get_var_register(c, node->left->decl);
+		}
 		else
 			r = gen_ir(c, node->left);
         
@@ -182,7 +203,15 @@ Register gen_ir(IR_Code *c, Node *node)
 		{
 			Register var_reg = alloc_register(c, curr->t);
             
-			curr->stack_offset = alloc_size_aligned(c, curr->t->size);
+			//TODO: multi dimension array, recursive size?
+			if (curr->t->t == ARRAY)
+			{
+				c->curr_func->stack_size = align_to_size(c->curr_func->stack_size, curr->t->ptr_to->size);
+				curr->stack_offset = c->curr_func->stack_size;
+				c->curr_func->stack_size += curr->t->length * curr->t->ptr_to->size;
+			}
+			else
+				curr->stack_offset = alloc_size_aligned(c, curr->t->size);
             
         	set_var_register(c, curr, var_reg);
 			
@@ -211,7 +240,12 @@ Register gen_ir(IR_Code *c, Node *node)
 			Register r;
             
 			if (node->left->left->type == NODE_VAR)
-				r = get_var_register(c, node->left->left->decl);
+			{
+				if (node->left->left->decl->t->t == ARRAY)
+					r = gen_ir(c, node->left->left);
+				else
+					r = get_var_register(c, node->left->left->decl);
+			}
 			else
 				r = gen_ir(c, node->left->left);
             
@@ -258,7 +292,7 @@ Register gen_ir(IR_Code *c, Node *node)
 		e->r1 = alloc_register_value(c, (RValue){.type = RV_U64, .u64 = offset});
 		e->r2 = r1;
         
-        e = add_instruction(c, token_type_to_ir_op(node->op));
+        e = add_instruction(c, token_type_to_ir_op(node->token->type));
         e->r0 = alloc_register(c, node->t);
         e->r1 = r1;
         e->r2 = r2;
