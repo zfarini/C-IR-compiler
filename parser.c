@@ -562,9 +562,28 @@ Node *parse_atom(Parser *p)
 		skip_token(p);
 		node->left = parse_atom(p);
 	}
+	else if (token->type == TOKEN_SIZEOF)
+	{
+		node = make_node(p, NODE_NUMBER);
+		node->value.type = RV_U32;
+		skip_token(p);
+
+		if (get_curr_token(p)->type == '(')
+		{
+			if (is_typename(p->tokens[p->curr_token + 1].type))
+			{
+				skip_token(p);
+				node->value.u32 = parse_type(p)->size;
+				expect_token(p, ')');
+			}
+			else
+				node->value.u32 = add_type(p, parse_atom(p))->size;
+		}
+		else
+			node->value.u32 = add_type(p, parse_atom(p))->size;
+	}
     else
         error_token(get_curr_token(p), "expected an expression");
-    
     return (node);
 }
 
@@ -698,6 +717,13 @@ int types_are_equal(Type *t1, Type *t2)
 	return types_are_equal(t1->ptr_to, t2->ptr_to);
 }
 
+int is_castable(Type *from, Type *to)
+{
+	if (from->t == VOID && to->t != VOID)
+		return 0;
+	return 1;
+}
+
 Type *implicit_cast(Parser *p, Node **node, Type *type)
 {
 	assert(*node);
@@ -705,8 +731,9 @@ Type *implicit_cast(Parser *p, Node **node, Type *type)
 	//add_type(p, *node);
 	if (types_are_equal(type, (*node)->t))
 		return type;
-	if ((*node)->t->t == VOID)
-		error_token((*node)->token, "cannot cast `void` to `%s`", get_type_str(type));
+	if (!is_castable((*node)->t, type))
+		error_token((*node)->token, "cannot cast from '%s' to '%s'",
+					get_type_str((*node)->t), get_type_str(type));
 	// TODO: check if its castable
 	// return in a void function?
 	Node *cast = make_node(p, NODE_CAST);
@@ -718,11 +745,10 @@ Type *implicit_cast(Parser *p, Node **node, Type *type)
 
 Type *find_common_type(Type *t1, Type *t2)
 {
-    if (t1->t == DOUBLE || t2->t == DOUBLE)
-        return t1->t == DOUBLE ? t1 : t2;
-    if (t1->t == FLOAT || t2->t == FLOAT)
-        return t1->t == FLOAT ? t1 : t2;
-    
+	if (t1->t == DOUBLE || t2->t == DOUBLE)
+		return t1->t == DOUBLE ? t1 : t2;
+	if (t1->t == FLOAT || t2->t == FLOAT)
+		return t1->t == FLOAT ? t1 : t2;
 	if (t1->ptr_to)
 		return t1;
 	if (t2->ptr_to)
@@ -743,7 +769,13 @@ Type *add_type(Parser *p, Node *node)
 	if (!node)
 		return 0;
 	if (node->type == NODE_CAST)
-		add_type(p, node->left);
+	{
+		Type *t1 = add_type(p, node->left);
+
+		if (!is_castable(t1, node->t))
+			error_token(node->left->token, "cannot cast from '%s' to '%s'",
+					get_type_str(t1), get_type_str(node->t));
+	}
 	else if (node->type == NODE_VARS_DECL)
 	{
 		Node *curr = node->next_decl;
@@ -861,7 +893,7 @@ Type *add_type(Parser *p, Node *node)
                 || (t1->ptr_to && (t2->t == FLOAT || t2->t == DOUBLE || !t1->ptr_to->size))
                 || (t2->ptr_to && (t1->t == FLOAT || t1->t == DOUBLE
                                    || !t2->ptr_to->size)))
-				error_token(node->token, "invalid operands to binary expression ('%s' and '%s')", get_type_str(t1), get_type_str(t2));
+				error_token(node->token, "invalid operands to binary expression `%s` ('%s' and '%s')", get_token_typename(node->token->type), get_type_str(t1), get_type_str(t2));
 			if (t1->ptr_to && !t2->ptr_to && (tt == '+' || tt == '-'))
 				t = t1;
 			else if (t2->ptr_to && !t1->ptr_to && tt == '+')

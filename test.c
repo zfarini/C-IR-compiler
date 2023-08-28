@@ -4,8 +4,5 @@
 
 int main()
 {
-	char *a;
-	unsigned char *b;
-
-	a - b;
+	printf ("%d\n", sizeof 5 + 10);
 }

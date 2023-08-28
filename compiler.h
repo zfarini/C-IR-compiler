@@ -82,6 +82,7 @@ typedef enum
 	TOKEN_RETURN,
     TOKEN_IF,
     TOKEN_ELSE,
+	TOKEN_SIZEOF,
     
 	TOKEN_BEGIN_TYPES,
     TOKEN_INT,

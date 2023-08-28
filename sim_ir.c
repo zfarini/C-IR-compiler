@@ -176,7 +176,7 @@ int	sim_ir_code(IR_Code *c)
             if (e->r1.type->t == PTR)
                 s = e->r1.type->ptr_to->size;
             else if (e->r2.type->t == PTR)
-                s = e->r1.type->ptr_to->size;
+                s = e->r2.type->ptr_to->size;
 #define OP(op, v1, v2) do{\
 if (v2.type == RV_U64) regs[e->r0.i].u64 = v1.u64 op v2.u64 * s; \
 else if (v2.type == RV_U32) regs[e->r0.i].u64 = v1.u64 op v2.u32 * s; \
@@ -327,8 +327,9 @@ regs[e->r0.i].type = RV_U64; \
             
             
             // TODO: simplify this shit
-#define U(d1, d2, U2, u2) [RV_##U##d1 * RVALUE_COUNT + RV_##U2##d2] = {.u##d1 = (uint##d1##_t)r1_value.##u2##d2, .type = t0}
-#define I(d1, d2, U2, u2) [RV_##I##d1 * RVALUE_COUNT + RV_##U2##d2] = {.i##d1 = (int##d1##_t)r1_value.##u2##d2, .type = t0}
+			#define Join(r1) r1
+#define U(d1, d2, U2, u2) [RV_##U##d1 * RVALUE_COUNT + RV_##U2##d2] = {.u##d1 = (uint##d1##_t)Join(r1_value.)u2##d2, .type = t0}
+#define I(d1, d2, U2, u2) [RV_##I##d1 * RVALUE_COUNT + RV_##U2##d2] = {.i##d1 = (int##d1##_t)Join(r1_value.)u2##d2, .type = t0}
             
 #define ALL_U(d) U(d, 64, U, u), U(d, 32, U, u), U(d, 16, U, u), U(d, 8, U, u), \
 U(d, 64, I, i), U(d, 32, I, i), U(d, 16, I, i), U(d, 8, I, i)
@@ -337,7 +338,7 @@ I(d, 64, I, i), I(d, 32, I, i), I(d, 16, I, i), I(d, 8, I, i)
             
 #define ALL(d) ALL_U(d), ALL_I(d)
             
-#define F(d1, d2, U2, u2, ex) [RV_F##d1 * RVALUE_COUNT + RV_##U2##d2] = {.f##d1 = (float##d1)r1_value.##u2##d2, .type = t0}, \
+#define F(d1, d2, U2, u2, ex) [RV_F##d1 * RVALUE_COUNT + RV_##U2##d2] = {.f##d1 = (float##d1)Join(r1_value.)u2##d2, .type = t0}, \
 [RV_##U2##d2 * RVALUE_COUNT + RV_F##d1] = {.u##d2 = (ex##int##d2##_t)r1_value.f##d1, .type = t0}
 #define ALL_F(d) F(d, 64, I, i,), F(d, 32, I, i,), F(d, 16, I, i,), F(d, 8, I, i,), \
 F(d, 64, U, u, u), F(d, 32, U, u, u), F(d, 16, U, u, u), F(d, 8, U, u, u)
@@ -366,6 +367,7 @@ F(d, 64, U, u, u), F(d, 32, U, u, u), F(d, 16, U, u, u), F(d, 8, U, u, u)
 #undef ALL
 #undef ALL_U
 #undef ALL_I
+#undef Join
         }
         else
             assert(0);

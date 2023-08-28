@@ -1,6 +1,5 @@
 #include "compiler.h"
 
-
 char *find_char_in_str(char *s, char c)
 {
     while (*s)
@@ -19,7 +18,7 @@ char *find_char_in_str(char *s, char c)
 #include "print_ir.c"
 #include "optimize_ir.c"
 
-//const char* __asan_default_options() { return "detect_leaks=0"; }
+const char* __asan_default_options() { return "detect_leaks=0"; }
 
 char *load_entire_file(char *filename)
 {

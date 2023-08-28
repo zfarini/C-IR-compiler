@@ -1,14 +1,6 @@
-int *inc(int *a)
-{
-	*a = *a + 1;
-    return a;
-}
+void f() {}
 
 int main()
 {
-    int a = 'a';
-    
-    print (char)a;
-    print (char)'\n';
-    print (char)a;
+	print sizeof 3 + (char *)5;
 }

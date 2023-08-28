@@ -11,7 +11,9 @@ int token_type_to_ir_op(int type)
     else if (type == TOKEN_GREATER_OR_EQUAL)
         return OP_GREATER_OR_EQUAL;
     else
+	{
         assert(0);
+	}
 	return -1;
 }
 

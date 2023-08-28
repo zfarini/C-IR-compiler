@@ -24,6 +24,7 @@ global struct
 	{"float",		TOKEN_FLOAT},
 	{"double",		TOKEN_DOUBLE},
 	{"return",		TOKEN_RETURN},
+	{"sizeof",		TOKEN_SIZEOF},
 	// operators (sort by length)
     {"==",      TOKEN_EQUAL},
     {"!=",      TOKEN_NOT_EQUAL},
@@ -196,7 +197,7 @@ Token *tokenize(char *s)
                     type = RV_U32;
                 else if (value > UINT32_MAX && value <= INT64_MAX)
                     type = RV_I64;
-                else
+                else if (value > INT64_MAX)
                     type = RV_U64;
                 
                 int u_suffix = 0;
@@ -204,7 +205,7 @@ Token *tokenize(char *s)
                 
                 while (!u_suffix || !l_suffix)
                 {
-                    if (tolower(s[i] == 'u'))
+                    if (tolower(s[i]) == 'u')
                     {
                         i++;
                         u_suffix = 1;
