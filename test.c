@@ -1,134 +1,75 @@
-
-#include <math.h>
+#include <stdint.h>
 #include <stdio.h>
-#include <string.h>
+#include <limits.h>
 
-
-
-#define M_PI_M_2  6.28318548202514648438
-#define M_PI  3.14159274101257324219
-#define M_PI_2  1.57079637050628662109
-
-int compare_float(double f1, double f2)
+enum RValue_Type
 {
- double precision = 0.00000000000000000001;
- if ((f1 - precision) < f2)
-  {
- return -1;
-  }
- else if ((f1 + precision) > f2)
- {
-  return 1;
- }
- else
-  {
- return 0;
-  }
+	RV_U64 = 1,
+    RV_U32,
+    RV_U16,
+    RV_U8,
+    RV_I64,
+    RV_I32,
+    RV_I16,
+    RV_I8,
+    RV_PTR,
+    RV_F32,
+    RV_F64,
+    RVALUE_COUNT,
+};
+
+typedef struct RValue {
+	union {
+		uint64_t u64;
+		uint32_t u32;
+		uint16_t u16;
+		uint8_t	 u8;
+		int64_t  i64;
+		int32_t  i32;
+		int16_t  i16;
+		int8_t	 i8;
+        float f32;
+        double f64;
+	};
+	int type;
+} RValue;
+
+RValue add_rvalues(RValue r1, RValue r2)
+{
+    RValue result;
+    result.type = r1.type;
+
+    switch (r1.type)
+    {
+        case RV_U64:
+        case RV_U32:
+        case RV_U16:
+        case RV_U8:
+            result.u64 = r1.u64 / r2.u64;
+			break ;
+		case RV_I64:
+        case RV_I32:
+        case RV_I16:
+        case RV_I8:
+            result.i64 = r1.i64 <= r2.i64;
+			break ;
+        case RV_PTR:
+            // Handle pointer addition
+            break;
+        case RV_F32:
+        case RV_F64:
+            result.i32 = r1.f64 < r2.f64; // Use the larger type to store the sum
+            break;
+    }
+
+    return result;
 }
 
-float my_cos(float x)
-{
-
-
- if( x < 0.0f ) 
-  	x = -x;
-
- // if (0 <= compare_float(x,M_PI_M_2)) 
- 	{
-  		//x = x - M_PI_M_2;
-		while (x > M_PI_M_2)
-		{
-  			x = x - M_PI_M_2;
-		}
-  	}
-
-  if ((0 <= compare_float(x, M_PI)) && (-1 == compare_float(x, M_PI_M_2)))
-  {
-   x = x - M_PI;
-   return ((-1)*(1.0f - (x*x/2.0f)*( 1.0f - (x*x/12.0f) * ( 1.0f - (x*x/30.0f) * (1.0f - (x*x/56.0f )*(1.0f - (x*x/90.0f)*(1.0f - (x*x/132.0f)*(1.0f - (x*x/182.0f)))))))));
-  } 
- return 1.0f - (x*x/2.0f)*( 1.0f - (x*x/12.0f) * ( 1.0f - (x*x/30.0f) * (1.0f - (x*x/56.0f )*(1.0f - (x*x/90.0f)*(1.0f - (x*x/132.0f)*(1.0f - (x*x/182.0f)))))));
-}
-
-float my_sin(float x)
-{
-	//float M_PI_2 = 1.57079637050628662109;
-	return my_cos(x - M_PI_2);
-}
-
-void my_memset(char *ptr, char c, int size)
-{
-	for (int i = 0; i < size; i = i + 1)
-		ptr[i] = c;
-}
-
-// TODO: for (;;) + for (j = 0 ;;)
 int main()
 {
-	char ascii[13];
-
-	ascii[0] = '.';
-	ascii[1] = ',';
-	ascii[2] = '-';
-	ascii[3] = '~';
-	ascii[4] = ':';
-	ascii[5] = ';';
-	ascii[6] = '=';
-	ascii[7] = '!';
-	ascii[8] = '*';
-	ascii[9] = '#';
-	ascii[10] = '$';
-	ascii[11] = '@';
-	ascii[12] = 0;
-//".,-~:;=!*#$@"
-
-	int k;
-    float A=0, B=0, i, j, z[1760];
-    char b[1760];
-	while (1)
-	{
-        my_memset(b,32,1760);
-        my_memset(z,0,7040);
-		j = 0;
-        for(; 6.28>j; j=j+0.07) {
-			i = 0;
-            for(; 6.28 >i; i=i+0.02) {
-                float my_sini=my_sin(i),
-                      my_cosj=my_cos(j),
-                      my_sinA=my_sin(A),
-                      my_sinj=my_sin(j),
-                      my_cosA=my_cos(A),
-                      my_cosj2=my_cosj+2,
-                      mess=1/(my_sini*my_cosj2*my_sinA+my_sinj*my_cosA+5),
-                      my_cosi=my_cos(i),
-                      my_cosB=my_cos(B),
-                      my_sinB=my_sin(B),
-                      t=my_sini*my_cosj2*my_cosA-my_sinj* my_sinA;
-                int x=40+30*mess*(my_cosi*my_cosj2*my_cosB-t*my_sinB),
-                    y= 12+15*mess*(my_cosi*my_cosj2*my_sinB +t*my_cosB),
-                    o=x+80*y,
-                    N=8*((my_sinj*my_sinA-my_sini*my_cosj*my_cosA)*my_cosB-my_sini*my_cosj*my_sinA-my_sinj*my_cosA-my_cosi *my_cosj*my_sinB);
-                if(22>y&&y>0&&x>0&&80>x&&mess>z[o]){
-                    z[o]=mess;
-					int index = 0;
-					if (N > 0)
-						index = N;
-                    b[o]=ascii[index];
-                }
-            }
-        }
- //       printf("\x1b[d");
-
-		k = 0;
-		for(; 1761>k; k = k + 1)
-		{
-			char c = 10;
-			if (k % 80)
-				c = b[k];
-			printf("%c", c);
-		}
-        A = A + 0.04;
-        B = B + 0.02;
-    }
+	RValue r1 = {.type = RV_F32, .f32 = 421421.1616};
+	RValue r2 = {.type = RV_F32, .f32 = -32.4512};
+	RValue res = add_rvalues(r1, r2);
+	printf("%d\n", res.i32);
+	printf("%d\n", r1.f32 < r2.f32);
 }
-

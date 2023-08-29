@@ -3,3 +3,21 @@ add types (to ast and ir)
 add arrays + string
 
 visualise simulation, pretty much like a debugger
+
+
+add a lot more tests
+
+!!!! simplify the type system
+    like you can always do r.u64 = r1.u64 + r2.u64 for all int types
+
+    == != (just check if the values are equal for every type)
+    + - *  (these should work with r.u64 = r1.u64 op r2.u64) (but not for floats)
+    
+    <= >= < > (I think for unsigned types it works like above but for signed you have to check each) (nop for floats)
+    / % (have to check for each type)
+
+    division does not work (-2 / 2)
+
+    !! simplify casting
+
+    do pointer arithmetic multiplication  by type before sim

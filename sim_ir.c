@@ -22,6 +22,91 @@ int get_rvalue_type_from_ctype(Type *t)
 	return 0;
 }
 
+RValue convert_rvalue_type(RValue r, int new_type)
+{
+    RValue result;
+    result.type = new_type;
+
+    switch (new_type)
+    {
+        case RV_U64:
+            result.u64 = (uint64_t)r.i64;
+            break;
+        case RV_U32:
+            result.u32 = (uint32_t)r.i64;
+            break;
+        case RV_U16:
+            result.u16 = (uint16_t)r.i64;
+            break;
+        case RV_U8:
+            result.u8 = (uint8_t)r.i64;
+            break;
+        case RV_I64:
+            result.i64 = r.i64;
+            break;
+        case RV_I32:
+            result.i32 = r.i32;
+            break;
+        case RV_I16:
+            result.i16 = r.i16;
+            break;
+        case RV_I8:
+            result.i8 = r.i8;
+            break;
+        case RV_PTR:
+            // Handle pointer conversion
+            break;
+        case RV_F32:
+            switch (r.type) {
+                case RV_I64:
+                case RV_I32:
+                case RV_I16:
+                case RV_I8:
+                    result.f32 = (float)r.i64;
+                    break;
+                case RV_U64:
+                case RV_U32:
+                case RV_U16:
+                case RV_U8:
+                    result.f32 = (float)r.u64;
+                    break;
+                case RV_F64:
+                    result.f32 = (float)r.f64;
+                    break;
+                default:
+                    // Handle other cases
+                    break;
+            }
+            break;
+        case RV_F64:
+            switch (r.type) {
+                case RV_I64:
+                case RV_I32:
+                case RV_I16:
+                case RV_I8:
+                    result.f64 = (double)r.i64;
+                    break;
+                case RV_U64:
+                case RV_U32:
+                case RV_U16:
+                case RV_U8:
+                    result.f64 = (double)r.u64;
+                    break;
+                case RV_F32:
+                    result.f64 = (double)r.f32;
+                    break;
+                default:
+                    // Handle other cases
+                    break;
+            }
+            break;
+    }
+
+    return result;
+}
+
+
+
 RValue eval_op(int op, RValue r1, RValue r2)
 {
 	assert(r1.type == r2.type);
@@ -29,8 +114,47 @@ RValue eval_op(int op, RValue r1, RValue r2)
     
 	RValue r;
     
-	r.type = -1;
+    #if 0
+	r.type = r1.type;
     
+    if (op == OP_EQUAL)
+    {
+        r.type = RV_I32;
+        r.i32 = r1.u64 == r2.u64;
+    }
+    else if (op == OP_NOT_EQUAL)
+    {
+        r.type = RV_I32;
+        r.i32 = r1.u64 == r2.u64;
+    }
+    else if (1) // / % <= >= < > (just do every one)
+    {
+    }
+
+    else
+    {
+        
+        if (r.type < RV_F32)
+        {
+            if (op == OP_ADD) r.u64 = r1.u64 + r2.u64;
+            else if (op == OP_SUB) r.u64 = r1.u64 - r2.u64;
+            else if (op == OP_MUL) r.u64 = r1.u64 * r2.u64;
+            else
+            {
+                
+            }
+        }
+        else if (r1.type == RV_F32)
+        {
+
+        }
+        else if (r1.type == RV_F64)
+        {
+
+        }
+    }
+    #else
+    r.type = -1;
 #define OP_INT(kind, p) if (op == kind) {\
 r.type = t; \
 if	  (t == RV_U64) r.u64 = r1.u64 p r2.u64;\
@@ -50,24 +174,41 @@ else assert(0);
     
 #define OP(kind, p) OP_INT(kind, p) OP_FLOAT(kind, p) }
 #define OP_NO_FLOAT(kind, p) OP_INT(kind, p) }
-    
+#define OPI(kind, p)  if (op == kind) {\
+r.type = RV_I32; \
+if	  (t == RV_U64) r.i32 = r1.u64 p r2.u64;\
+else if (t == RV_U32) r.i32 = r1.u32 p r2.u32;\
+else if (t == RV_U16) r.i32 = r1.u16 p r2.u16;\
+else if (t == RV_U8)  r.i32  = r1.u8  p r2.u8;\
+else if (t == RV_I64) r.i32 = r1.i64 p r2.i64;\
+else if (t == RV_I32) r.i32 = r1.i32 p r2.i32;\
+else if (t == RV_I16) r.i32 = r1.i16 p r2.i16;\
+else if (t == RV_I8)  r.i32  = r1.i8  p r2.i8; \
+else if (t == RV_F32) r.i32 = r1.f32 p r2.f32;\
+else if (t == RV_F64) r.i32 = r1.f64 p r2.f64; \
+else assert(0); }
+
     OP(OP_ADD, +);
     OP(OP_SUB, -);
     OP(OP_MUL, *);
     OP(OP_DIV, /);
     OP_NO_FLOAT(OP_MOD, %);
-    OP(OP_LESS, <);
-    OP(OP_GREATER, >);
-    OP(OP_EQUAL, ==);
-    OP(OP_LESS_OR_EQUAL, <=);
-    OP(OP_GREATER_OR_EQUAL, >=);
-    OP(OP_NOT_EQUAL, !=);
+
+    OPI(OP_LESS, <);
+    OPI(OP_GREATER, >);
+    OPI(OP_EQUAL, ==);
+    OPI(OP_LESS_OR_EQUAL, <=);
+    OPI(OP_GREATER_OR_EQUAL, >=);
+    OPI(OP_NOT_EQUAL, !=);
     assert(r.type != -1);
     
 #undef OP_INT
 #undef OP_FLOAT
 #undef OP
 #undef OP_NO_FLOAT
+#undef OPI
+
+    #endif
     return r;
 }
 
@@ -160,7 +301,9 @@ int	sim_ir_code(IR_Code *c)
 		regs[REG_RT].type = get_rvalue_type_from_ctype(main->decl->ret_type);
 	regs[REG_SP].u64 = (uint64_t)stack;
 	regs[REG_SP].type = RV_U64;
-    
+    int cast = 0;
+    int op = 0;
+
     while (1)
     {
 		//printf("at %d\n", ip);
@@ -177,6 +320,7 @@ int	sim_ir_code(IR_Code *c)
         
         if (e->op < OP_BINARY)
 		{
+            op++;
             int s = 0;
             
             if (e->r1.type->t == PTR)
@@ -338,7 +482,8 @@ regs[e->r0.i].type = RV_U64; \
         }
         else if (e->op == OP_CAST)
         {
-            
+            regs[e->r0.i] = convert_rvalue_type(r1_value, get_rvalue_type_from_ctype(e->r0.type));
+           #if 1
             int t0 = get_rvalue_type_from_ctype(e->r0.type);
             int t1 = get_rvalue_type_from_ctype(e->r1.type);
             
@@ -359,19 +504,35 @@ I(d, 64, I, i), I(d, 32, I, i), I(d, 16, I, i), I(d, 8, I, i)
 [RV_##U2##d2 * RVALUE_COUNT + RV_F##d1] = {.u##d2 = (ex##int##d2##_t)r1_value.f##d1, .type = t0}
 #define ALL_F(d) F(d, 64, I, i,), F(d, 32, I, i,), F(d, 16, I, i,), F(d, 8, I, i,), \
 F(d, 64, U, u, u), F(d, 32, U, u, u), F(d, 16, U, u, u), F(d, 8, U, u, u)
-            
-            
+            cast++;
+            if (t0 == t1)
+            {
+                regs[e->r0.i] = r1_value;
+            }
+            else
+            {
+                #if 0
             RValue cast_table[] = {
-                ALL(64),
-                ALL(32),
-                ALL(16),
-                ALL(8),
-                ALL_F(64),
-                ALL_F(32),
+                #if 1
+                 ALL(64),
+                 ALL(32),
+                 ALL(16),
+                 ALL(8),
+                 ALL_F(64),
+                 ALL_F(32),
+
+                 #else
+                
+                [RV_F32 * RVALUE_COUNT + RV_I32] = {.f32 = (float32)r1_value.i32, .type = t0},
+                [RV_I32 * RVALUE_COUNT + RV_F32] = {.i32 = (int32_t)r1_value.f32, .type = t0},
+                [RV_F64 * RVALUE_COUNT + RV_I32] = {.f64 = (float64)r1_value.i32, .type = t0},
+                [RV_I8 * RVALUE_COUNT + RV_I32] = {.i8 = (int8_t)r1_value.i32, .type = t0},
+                #endif
                 [RV_F64 * RVALUE_COUNT + RV_F32] = {.f64 = (float64)r1_value.f32, .type = t0},
                 [RV_F32 * RVALUE_COUNT + RV_F64] = {.f32 = (float32)r1_value.f64, .type = t0},
             };
             
+        
             int idx = t0 * RVALUE_COUNT + t1;
             if (idx >= array_length(cast_table) || cast_table[idx].type != t0)
             {
@@ -379,17 +540,32 @@ F(d, 64, U, u, u), F(d, 32, U, u, u), F(d, 16, U, u, u), F(d, 8, U, u, u)
                 assert(0);
             }
             regs[e->r0.i] = cast_table[idx];
+            #else
+            if (t0 == RV_F64 && t1 == RV_F32) regs[e->r0.i].f64 = r1_value.f32;
+            else if (t0 == RV_F32 && t1 == RV_F64) regs[e->r0.i].f32 = r1_value.f64;
+            else if (t0 == RV_F64 && t1 == RV_I32) regs[e->r0.i].f64 = r1_value.i32;
+            else if (t0 == RV_F64 && t1 == RV_F32) regs[e->r0.i].f64 = r1_value.f32;
+            else if (t0 == RV_F32 && t1 == RV_I32) regs[e->r0.i].f32 = r1_value.i32;
+            else if (t0 == RV_I32 && t1 == RV_F32) regs[e->r0.i].i32 = r1_value.f32;
+            else if (t0 == RV_I8 && t1 == RV_I32) regs[e->r0.i].i8 = r1_value.i32;
+            else assert(0);
+
+            regs[e->r0.i].type = t0;
+            #endif
+            }
 #undef U
 #undef I
 #undef ALL
 #undef ALL_U
 #undef ALL_I
 #undef Join
+#endif
         }
         else
             assert(0);
         ip++;
     }
     free(stack);
+    printf("%d %d\n", cast, op);
     return err;
 }
