@@ -548,16 +548,14 @@ Register gen_ir(IR_Code *c, Node *node)
             curr = curr->next_stmt;
         }
     }
-	else if (node->type == NODE_PRINT)
+	else if (node->type == NODE_WRITE)
     {
-		Node *curr = node->first_arg;
 
-		while (curr)
-		{
-			Register r = gen_ir(c, curr);
-			add_instruction(c, OP_PRINT)->r1 = r;
-			curr = curr->next_arg;
-		}
+		IR_Instruction *e = add_instruction(c, OP_WRITE);
+
+		assert(node->arg_count == 2);
+		e->r1 = gen_ir(c, node->first_arg);
+		e->r2 = gen_ir(c, node->first_arg->next_arg);
     }
 	else if (node->type == NODE_ASSERT)
 	{

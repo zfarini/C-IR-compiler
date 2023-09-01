@@ -213,17 +213,15 @@ Type *add_type(Parser *p, Node *node)
 			implicit_cast(p, &node->left, node->function->ret_type);
 		}
 	}
-	else if (node->type == NODE_PRINT)
+	else if (node->type == NODE_WRITE)
 	{
-		Node *curr = node->first_arg;
+		Type *type_void_ptr = &(Type){.t = PTR, .size = 8, .is_unsigned = 1,};
+		type_void_ptr.ptr_to = 
+		add_type(p, node->first_arg);
+		add_type(p, node->first_arg->next_arg);
 
-		while (curr)
-		{
-			add_type(p, curr);
-			if (curr->t->t == VOID)
-				error_token(curr->token, "expected a number");
-			curr = curr->next_arg;
-		}
+		implicit_cast(p, &node->first_arg, type_void_ptr);
+		implicit_cast(p, &node->first_arg->next_arg, type_uint);
 	}
 	else if (node->type == NODE_ASSERT)
     {

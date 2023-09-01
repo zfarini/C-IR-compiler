@@ -127,7 +127,7 @@ enum NodeType
     NODE_WHILE,
     NODE_BLOCK,
     NODE_IF,
-    NODE_PRINT,
+    NODE_WRITE,
 	NODE_ASSERT,
 	NODE_VARS_DECL,
     NODE_VAR_DECL,
@@ -254,7 +254,7 @@ enum
     OP_JMP,
     OP_JMPZ,
 	OP_JMPNZ, // used only in ||, maybe just remove it?
-    OP_PRINT,
+    OP_WRITE,
     OP_CALL,
     OP_RET,
 	OP_LOAD,

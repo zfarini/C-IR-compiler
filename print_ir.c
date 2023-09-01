@@ -56,7 +56,7 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
 	char r2[64] = {0};
     
 	get_reg_str(e->r0, r0, c->reserved_reg);
-	get_reg_str(e->r1, r1, c->reserved_reg);
+	get_reg_str(e->r1, r1, c->reserved_reg);//
 	get_reg_str(e->r2, r2, c->reserved_reg);
     
     if (e->op == OP_JMP)
@@ -65,8 +65,8 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
         printf("jmpz %s%d %s", (in_block ? "B" : "L"), e->label, r1);
 	else if (e->op == OP_JMPNZ)
 		printf("jmpnz %s%d %s", (in_block ? "B" : "L"), e->label, r1);
-    else if (e->op == OP_PRINT)
-        printf("print %s", r1);
+    else if (e->op == OP_WRITE)
+        printf("write %s, %s", r1, r2);
 	else if (e->op == OP_ASSERT)
 		printf("assert %s", r1);
     else if (e->op == OP_CALL)

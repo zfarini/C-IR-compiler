@@ -301,9 +301,7 @@ int	sim_ir_code(IR_Code *c)
 		regs[REG_RT].type = get_rvalue_type_from_ctype(main->decl->ret_type);
 	regs[REG_SP].u64 = (uint64_t)stack;
 	regs[REG_SP].type = RV_U64;
-    int cast = 0;
-    int op = 0;
-
+    int cast = 0, op = 0, memory = 0;
     while (1)
     {
 		//printf("at %d\n", ip);
@@ -396,7 +394,7 @@ regs[e->r0.i].type = RV_U64; \
                 continue ;
             }
 		}
-        else if (e->op == OP_PRINT)
+        else if (e->op == OP_WRITE)
         {
             print_reg_value(r1_value);
             
@@ -461,6 +459,7 @@ regs[e->r0.i].type = RV_U64; \
             else if (t == RV_F64) regs[e->r2.i].f64  = *(double   *)s;
             else assert(0);
             regs[e->r2.i].type = t;
+			memory++;
         }
         else if (e->op == OP_STORE)
         {
@@ -479,6 +478,7 @@ regs[e->r0.i].type = RV_U64; \
             else if (t == RV_F32) *(float    *)s = r2_value.f32;
             else if (t == RV_F64) *(double   *)s = r2_value.f64;
             else assert(0);
+			memory++;
         }
         else if (e->op == OP_CAST)
         {
@@ -566,6 +566,6 @@ F(d, 64, U, u, u), F(d, 32, U, u, u), F(d, 16, U, u, u), F(d, 8, U, u, u)
         ip++;
     }
     free(stack);
-    printf("%d %d\n", cast, op);
+    printf("%d %d %d\n", cast, op, memory);
     return err;
 }

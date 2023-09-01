@@ -187,7 +187,7 @@ int main(int argc, char **argv)
     
     print_ir_code(c);
 	
-    sim_ir_code(c);
+ //   sim_ir_code(c);
 	
 	//for (int i = 0; i < c->function_count; i++)
 	//	c->functions[i].cfg = gen_function_control_flow_graph(c, &c->functions[i]);

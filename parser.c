@@ -521,12 +521,14 @@ Node *parse_statement(Parser *p)
         leave_scope(p);
     }
     else if (get_curr_token(p)->type == TOKEN_IDENTIFIER &&
-             (!strcmp(get_curr_token(p)->name, "print")))
+             (!strcmp(get_curr_token(p)->name, "write")))
     {
-        node = make_node(p, NODE_PRINT);
+        node = make_node(p, NODE_WRITE);
         skip_token(p);
         
 		parse_function_args(p, node);
+		if (node->arg_count != 2)
+			error_token(node->token, "expected 2 arguments for write");
 		expect_token(p, ';');
     }
     else if (get_curr_token(p)->type == TOKEN_IDENTIFIER &&
