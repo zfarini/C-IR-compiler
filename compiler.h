@@ -68,6 +68,7 @@ typedef enum
 {
     TOKEN_NUMBER = 256,
     TOKEN_IDENTIFIER,
+	TOKEN_STRING,
     
     TOKEN_BINARY_BEGIN,
     TOKEN_LOGICAL_AND,
@@ -76,6 +77,11 @@ typedef enum
     TOKEN_NOT_EQUAL,
     TOKEN_LESS_OR_EQUAL,
     TOKEN_GREATER_OR_EQUAL,
+	TOKEN_ADD_EQUAL,
+	TOKEN_SUB_EQUAL,
+	TOKEN_MUL_EQUAL,
+	TOKEN_DIV_EQUAL,
+	TOKEN_MOD_EQUAL,
     TOKEN_BINARY_END,
     
     TOKEN_WHILE,
@@ -96,6 +102,8 @@ typedef enum
 	TOKEN_SIGNED,
 	TOKEN_END_TYPES,
 	TOKEN_FOR,
+
+
     
     TOKEN_FN,
     
@@ -108,6 +116,7 @@ typedef struct
 {
     int     type;
     char    *name;
+	char	*str;
     RValue  value;
     int     line;
     int     col;
@@ -122,6 +131,7 @@ enum NodeType
     NODE_FUNC_DEF = 256,
     NODE_FUNC_CALL,
     NODE_NUMBER,
+	NODE_STRING,
     NODE_VAR,
     NODE_BINOP,
     NODE_WHILE,
@@ -213,20 +223,28 @@ struct Scope
 
 typedef struct
 {
-    Node    *nodes;
-    int     first_free_node;
-    Token   *tokens;
-    int     curr_token;
-    Scope   *curr_scope;
-    Scope   *scopes;
-    int     scope_count;
+    Node    	*nodes;
+    int     	first_free_node;
+    Token   	*tokens;
+    int     	curr_token;
+    Scope   	*curr_scope;
+    Scope   	*scopes;
+    int     	scope_count;
     
-	Node	**functions;
-	int	     function_count;
+	Node		**functions;
+	int	    	 function_count;
     
-	Type	*types;
-	int 	first_free_type;
-	Node	*curr_func;
+	Type		*types;
+	int 		first_free_type;
+	Node		*curr_func;
+
+	char 		**strings;
+	uint64_t	*strings_offset;
+	int			string_count;
+	int			strings_size;
+
+	Node		*root_node;
+	char		*code;
 } Parser;
 
 enum
@@ -329,6 +347,10 @@ typedef struct
 	Register		*vars_reg;
 	int				var_count;
 	int				func_index;
+	Parser			*p;
+	Node			**node_stack;
+	int				node_stack_top;
+	
 } IR_Code;
 
 typedef struct IR_Basic_Block IR_Basic_Block;

@@ -70,6 +70,8 @@ int is_castable(Type *from, Type *to)
 	return 1;
 }
 
+// TODO: !!!!!!!!!!!!!!!!!!11
+// if someone points to the node we got a problem
 Type *implicit_cast(Parser *p, Node **node, Type *type)
 {
 	assert(*node);
@@ -174,9 +176,9 @@ Type *add_type(Parser *p, Node *node)
 		t = node->decl->ret_type;
 	}
 	else if (node->type == NODE_NUMBER)
-    {
         t = register_value_to_ctype(node->value);
-    }
+	else if (node->type == NODE_STRING)
+		t = type_string;
     else if (node->type == NODE_VAR)
 	{
 		if (node->decl->t->t == ARRAY)
@@ -215,12 +217,15 @@ Type *add_type(Parser *p, Node *node)
 	}
 	else if (node->type == NODE_WRITE)
 	{
-		Type *type_void_ptr = &(Type){.t = PTR, .size = 8, .is_unsigned = 1,};
-		type_void_ptr.ptr_to = 
-		add_type(p, node->first_arg);
-		add_type(p, node->first_arg->next_arg);
+		Node *next = node->first_arg->next_arg;
 
+		add_type(p, node->first_arg);
+		add_type(p, next);
+
+		node->first_arg->next_arg = 0;
 		implicit_cast(p, &node->first_arg, type_void_ptr);
+		node->first_arg->next_arg = next;
+
 		implicit_cast(p, &node->first_arg->next_arg, type_uint);
 	}
 	else if (node->type == NODE_ASSERT)

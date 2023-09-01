@@ -38,10 +38,6 @@ double cos(double x)
 		while (0 <= compare_float(x, M_PI_M_2))
 	{
   			x = x - M_PI_M_2;
-		//	print(x, (char)'\n');
-		//	for (int i = 0; i < 1000000; i = i + 1)
-		//	{
-		//	}
 		}
   	}
 
@@ -121,7 +117,6 @@ int main()
                 }
             }
         }
- //       printf("\x1b[d");
 
 		k = 0;
 		for(; 1761>k; k = k + 1)
@@ -129,7 +124,7 @@ int main()
 			char c = 10;
 			if (k % 80)
 				c = b[k];
-			print(c);
+			write(&c, 1);
 		}
         A = A + 0.04;
         B = B + 0.02;

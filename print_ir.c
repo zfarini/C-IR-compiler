@@ -92,7 +92,12 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
 			printf("[%s]", r1);
 	}
 	else if (e->op == OP_MOV)
-		printf("%s = %s", r0, r1);
+	{
+		if (e->node->type == NODE_STRING)
+			printf("%s = %.*s", r0, e->node->token->c1 - e->node->token->c0, c->p->code + e->node->token->c0);
+		else
+			printf("%s = %s", r0, r1);
+	}
     else if (e->op < OP_BINARY)
         printf("%s = %s %s %s", r0, r1, get_ir_op_str(e->op), r2);
 	else if (e->op == OP_CAST)
@@ -106,6 +111,7 @@ void print_instruction(IR_Code *c, IR_Instruction *e, int in_block)
 
 void print_ir_code(IR_Code *c)
 {
+
     printf("\033[1;32mgenerated ir:\033[0m (%d instructions, %d reserved registers)\n", c->instruction_count, c->reserved_reg);
     
     for (int i = 0; i < c->instruction_count; i++)
@@ -133,4 +139,7 @@ void print_ir_code(IR_Code *c)
             printf("\tL%d:\n", j);
         assert(c->labels[j] <= c->instruction_count);
     }
+//	printf("\033[1;32mdata:\033[0m\n");
+//	for (int i = 0; i < c->p->string_count; i++)
+//		printf("\"%s\" (offset %ld)\n", c->p->strings[i], c->p->strings_offset[i]);
 }

@@ -39,7 +39,7 @@ IR_Instruction *add_instruction(IR_Code *c, int op)
     
     e->op = op;
     c->instruction_count++;
-	e->node = c->curr_node;
+	e->node = c->node_stack[c->node_stack_top - 1];
     
     return e;
 }
@@ -90,6 +90,15 @@ int alloc_size_aligned(IR_Code *c, int size)
 	return res;
 }
 
+uint64_t get_string_offset(IR_Code *c, char *s)
+{
+	for (int i = 0; i < c->p->string_count; i++)
+		if (s == c->p->strings[i])
+			return c->p->strings_offset[i];
+	assert(0);
+	return 0;
+}
+
 Register gen_ir(IR_Code *c, Node *node)
 {
 
@@ -101,7 +110,8 @@ Register gen_ir(IR_Code *c, Node *node)
 	if (!node)
 		return reg;
 
-	c->curr_node = node; // this doesn't really work we should have more like a stack
+	c->node_stack[c->node_stack_top++] = node;
+
     if (node->type == NODE_NUMBER)
     {
         IR_Instruction *e = add_instruction(c, OP_MOV);
@@ -110,6 +120,15 @@ Register gen_ir(IR_Code *c, Node *node)
 		e->r1 = alloc_register_value(c, node->value);
 		reg = e->r0;
     }
+	else if (node->type == NODE_STRING)
+	{
+		IR_Instruction *e = add_instruction(c, OP_MOV);
+		
+		e->r0 = alloc_register(c, node->t);
+		uint64_t addr = get_string_offset(c, node->token->str);
+		e->r1 = alloc_register_value(c, (RValue){.type = RV_U64, .u64 = addr});
+		reg = e->r0;
+	}
     else if (node->type == NODE_VAR)
     {
         reg = get_var_register(c, node->decl);
@@ -482,11 +501,14 @@ Register gen_ir(IR_Code *c, Node *node)
             arg = arg->next_arg;
 		}
 		// 6
-		e = add_instruction(c, OP_MOV);
-        e->r0 = alloc_register(c, node->decl->ret_type);
-		e->r1.i = REG_RT;
-        e->r1.type = node->decl->ret_type;
-		reg = e->r0;
+		if (node->decl->ret_type->t != VOID)
+		{
+			e = add_instruction(c, OP_MOV);
+        	e->r0 = alloc_register(c, node->decl->ret_type);
+			e->r1.i = REG_RT;
+        	e->r1.type = node->decl->ret_type;
+			reg = e->r0;
+		}
     }
     else if (node->type == NODE_IF)
     {
@@ -550,12 +572,12 @@ Register gen_ir(IR_Code *c, Node *node)
     }
 	else if (node->type == NODE_WRITE)
     {
+		Register r1 = gen_ir(c, node->first_arg); // should push it to stack but who cares
+		Register r2 = gen_ir(c, node->first_arg->next_arg);
 
 		IR_Instruction *e = add_instruction(c, OP_WRITE);
-
-		assert(node->arg_count == 2);
-		e->r1 = gen_ir(c, node->first_arg);
-		e->r2 = gen_ir(c, node->first_arg->next_arg);
+		e->r1 = r1;
+		e->r2 = r2;
     }
 	else if (node->type == NODE_ASSERT)
 	{
@@ -584,13 +606,17 @@ Register gen_ir(IR_Code *c, Node *node)
     }
 	else
         assert(0);
+	c->node_stack_top--;
     return reg;
 }
 
-IR_Code *gen_ir_code(Node *node)
+IR_Code *gen_ir_code(Parser *p)
 {
+	Node *node = p->root_node;
+
     IR_Code *c = calloc(1, sizeof(*c));
 	
+	c->p = p;
 	c->reserved_reg = 0;
 	{
 		Node *curr = node;
@@ -608,6 +634,7 @@ IR_Code *gen_ir_code(Node *node)
     c->labels = calloc(sizeof(*c->labels), 1024);
 	c->functions = calloc(sizeof(*c->functions), 128);
 	c->vars_reg = calloc(sizeof(*c->vars_reg), 1024);
+	c->node_stack = calloc(sizeof(*c->node_stack), p->first_free_node);
     
 	Node *curr = node;
 	// we give the first n labels to functions so that

@@ -33,6 +33,11 @@ global struct
     {">=",      TOKEN_GREATER_OR_EQUAL},
     {"&&",      TOKEN_LOGICAL_AND},
     {"||",      TOKEN_LOGICAL_OR},
+	{"+=",		TOKEN_ADD_EQUAL},
+	{"-=",		TOKEN_SUB_EQUAL},
+	{"*=",		TOKEN_MUL_EQUAL},
+	{"/=",		TOKEN_DIV_EQUAL},
+	{"%=",		TOKEN_MOD_EQUAL},
 	{"+", '+'},
 	{"-", '-'},
 	{"*", '*'},
@@ -96,6 +101,20 @@ void skip_chars(char *s, int *i, int *line, int *col, int count)
 		*i = *i + 1;
 		count--;
 	}
+}
+
+char get_backspaced_char(char c)
+{
+	switch (c)
+    {
+        case 'n': return '\n';
+        case 't': return '\t';
+        case 'r': return '\r';
+        case 'f': return '\f';
+        case 'b': return '\b';
+        case 'a': return '\a';
+        default : return c;
+    }
 }
 
 Token *tokenize(char *s)
@@ -259,16 +278,7 @@ Token *tokenize(char *s)
             if (s[i] == '\\')
             {
                 i++;
-                switch (s[i])
-                {
-                    case 'n': token->value.i32 = '\n'; break;
-                    case 't': token->value.i32 = '\t'; break;
-                    case 'r': token->value.i32 = '\r'; break;
-                    case 'f': token->value.i32 = '\f'; break;
-                    case 'b': token->value.i32 = '\b'; break;
-                    case 'a': token->value.i32 = '\a'; break;
-                    default : token->value.i32 = s[i]; break;
-                }
+				token->value.i32 = get_backspaced_char(s[i]); 
             }
             else
                 token->value.i32 = s[i];
@@ -277,6 +287,36 @@ Token *tokenize(char *s)
                 error_token(token, "expected token `'`");
             i++;
         }
+		else if (s[i] == '"')
+		{
+			i++;
+			token->type = TOKEN_STRING;
+			int len = 0;
+			while (s[i] != '"' && s[i])
+			{
+				if (s[i] == '\\')
+					i++;
+				i++;
+				len++;
+			}
+			if (!s[i])
+				error_token(token, "expected token `\"`");
+			i++;
+			token->str = calloc(1, len + 1);
+			int j = token->c0 + 1, k = 0;
+			while (k < len)
+			{
+				if (s[j] == '\\')
+				{
+					j++;
+					token->str[k] = get_backspaced_char(s[j]);
+				}
+				else
+					token->str[k] = s[j];
+				k++;
+				j++;
+			}
+		}
         else {
             for (int k = 0; token_typenames[k].name; k++)
             {

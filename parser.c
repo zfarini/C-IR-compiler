@@ -9,10 +9,18 @@ Type *type_ulong	= &(Type){.t = LONG,	.size = 8, .is_unsigned = 1};
 Type *type_uint		= &(Type){.t = INT,		.size = 4, .is_unsigned = 1};
 Type *type_ushort	= &(Type){.t = SHORT,	.size = 2, .is_unsigned = 1};
 Type *type_uchar	= &(Type){.t = CHAR,	.size = 1, .is_unsigned = 1};
+Type *type_void_ptr	= &(Type){.t = PTR,	.size = 8, .is_unsigned = 1,
+							.ptr_to = &(Type){.t = VOID}};
+Type *type_string	= &(Type){.t = PTR,	.size = 8, .is_unsigned = 1,
+							.ptr_to = &(Type){.t = CHAR}};
 
 // TODO: change this
-Token *plus_token = &(Token){.type = '+', .line = -1};
-Token *minus_token = &(Token){.type = '-', .line = -1};
+Token *add_token = &(Token){.type = '+', .line = -1};
+Token *equal_token = &(Token){.type = '=', .line = -1};
+Token *sub_token = &(Token){.type = '-', .line = -1};
+Token *mul_token = &(Token){.type = '*', .line = -1};
+Token *div_token = &(Token){.type = '/', .line = -1};
+Token *mod_token = &(Token){.type = '%', .line = -1};
 
 
 Type *register_value_to_ctype(RValue value)
@@ -141,36 +149,67 @@ void leave_scope(Parser *p)
     p->curr_scope = p->curr_scope->parent;
 }
 
-Node *parse(Token *tokens)
+Parser *parse(char *s, Token *tokens)
 {
-    Parser p = {0};
+    Parser *p = calloc(sizeof(Parser), 1);
     
+	p->code = s;
+	p->strings = calloc(sizeof(*p->strings), 512);
+	p->strings_offset = calloc(sizeof(*p->strings_offset), 512);
+
     int token_count = 0;
+	int offset = 0;
     while (tokens[token_count].type)
+	{
+		Token *t = &tokens[token_count];
+		if (t->type == TOKEN_STRING)
+		{
+			int i = 0;
+			for (; i < p->string_count; i++)
+			{
+				if (!strcmp(p->strings[i], t->str))
+					break ;
+			}
+			if (i != p->string_count)
+				t->str = p->strings[i];
+			else
+			{
+				p->strings[p->string_count] = t->str;
+				p->strings_offset[p->string_count] = offset;
+				offset += strlen(t->str) + 1;
+				p->string_count++;
+			}
+		}
         token_count++;
+	}
+	p->strings_size = offset;
+	
     
-    p.nodes = calloc(sizeof(*p.nodes), token_count + 1);
-    p.tokens = tokens;
-    p.scopes = calloc(sizeof(*p.scopes), 512);
-	p.types = calloc(sizeof(*p.types), 512);
-	p.functions = calloc(sizeof(*p.functions), 128);
+    p->nodes = calloc(sizeof(*p->nodes), token_count + 1);
+    p->tokens = tokens;
+    p->scopes = calloc(sizeof(*p->scopes), 512);
+	p->types = calloc(sizeof(*p->types), 512);
+	p->functions = calloc(sizeof(*p->functions), 128);
+
     
-    enter_scope(&p);
+    enter_scope(p);
     
-    Node *res = parse_function(&p);
-	add_type(&p, res);
+    Node *res = parse_function(p);
+	add_type(p, res);
     
     Node *curr = res;
     
-    while (p.tokens[p.curr_token].type)
+    while (p->tokens[p->curr_token].type)
     {
-        curr->next_func = parse_function(&p);
+        curr->next_func = parse_function(p);
         curr = curr->next_func;
-		add_type(&p, curr);
+		add_type(p, curr);
     }
     
-    leave_scope(&p);
-    return res;
+    leave_scope(p);
+
+	p->root_node = res;
+	return p;
 }
 
 Node *find_var_decl(Parser *p, char *name)
@@ -559,6 +598,11 @@ Node *parse_atom(Parser *p)
         node = make_node(p, NODE_NUMBER);
         skip_token(p);
     }
+	else if (token->type == TOKEN_STRING)
+	{
+		node = make_node(p, NODE_STRING);
+		skip_token(p);
+	}
     else if (token->type == TOKEN_IDENTIFIER)
     {
         node = make_node(p, NODE_VAR);
@@ -625,7 +669,7 @@ Node *parse_atom(Parser *p)
     {
         node = make_node(p, NODE_BINOP);
         skip_token(p);
-		node->token = minus_token;
+		node->token = sub_token;
         node->left = make_node(p, NODE_NUMBER);
         node->left->value = (RValue){.type = RV_I32, .i32 = 0};
         node->right = parse_atom(p);
@@ -681,7 +725,7 @@ Node *parse_atom(Parser *p)
 			error_token(new->token, "expected an integer");
 
 		new->left = make_node(p, NODE_BINOP);
-		new->left->token = plus_token;
+		new->left->token = add_token;
 		new->left->left = node;
 		new->left->right = expr;
 		
@@ -711,6 +755,11 @@ Node *parse_expr(Parser *p, int min_prec)
     } op_table[TOKEN_COUNT] =
     {
         ['=']                       = {100, ASSOC_RIGHT},
+        [TOKEN_ADD_EQUAL]           = {100, ASSOC_RIGHT},
+        [TOKEN_SUB_EQUAL]           = {100, ASSOC_RIGHT},
+        [TOKEN_MUL_EQUAL]           = {100, ASSOC_RIGHT},
+        [TOKEN_DIV_EQUAL]           = {100, ASSOC_RIGHT},
+        [TOKEN_MOD_EQUAL]           = {100, ASSOC_RIGHT},
         
         [TOKEN_LOGICAL_AND]         = {130, ASSOC_LEFT},
         [TOKEN_LOGICAL_OR]          = {130, ASSOC_LEFT},
@@ -745,10 +794,32 @@ Node *parse_expr(Parser *p, int min_prec)
             next_prec++;
         
         Node *node = make_node(p, NODE_BINOP);
+
         node->left = res;
         skip_token(p);
         node->right = parse_expr(p, next_prec);
-        
+
+		// replace += with = .. + ..
+		// TODO: I don't really like this
+		int t = node->token->type;
+		if (t == TOKEN_ADD_EQUAL || t == TOKEN_SUB_EQUAL || t == TOKEN_MUL_EQUAL
+				|| t == TOKEN_DIV_EQUAL || t == TOKEN_MOD_EQUAL)
+		{
+			Node *r = node->right;
+			node->token = equal_token;
+			node->right = make_node(p, NODE_BINOP);
+
+			if (t == TOKEN_ADD_EQUAL) node->right->token = add_token;
+			else if (t == TOKEN_SUB_EQUAL) node->right->token = sub_token;
+			else if (t == TOKEN_MUL_EQUAL) node->right->token = mul_token;
+			else if (t == TOKEN_DIV_EQUAL) node->right->token = div_token;
+			else if (t == TOKEN_MOD_EQUAL) node->right->token = mod_token;
+			else assert(0);
+
+			node->right->left = node->left;
+			node->right->right = r;
+		}
+
 		if (node->token->type == '=' && (!is_node_lvalue(node->left)
 			|| (node->left->type == NODE_VAR && node->left->decl->t->t == ARRAY)))
 			error_token(node->left->token, "expected an lvalue");

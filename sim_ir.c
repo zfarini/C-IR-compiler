@@ -1,11 +1,3 @@
-
-
-//int	*get_int_from_stack(uint8_t *stack, int offset)
-//{
-//	assert(offset >= 0 && offset % 4 == 0);
-//	return (int *)(stack + offset);
-//}
-
 int get_rvalue_type_from_ctype(Type *t)
 {
 	int u = t->is_unsigned;
@@ -292,21 +284,37 @@ int	sim_ir_code(IR_Code *c)
 	int err = 0;
     
     ip = main->first_instruction;
-	int stack_max = 4096;
-	uint8_t *stack = malloc(stack_max * sizeof(int));
-	memset(stack, 0xcc, stack_max * sizeof(int));
+
+	uint64_t data_size = align_to_size(c->p->strings_size, 16);
+	uint64_t stack_size = 16 * 1024 * 1024; // 16mb
+	uint64_t memory_size = data_size + stack_size; 
+	uint8_t *memory = malloc(memory_size);
+
+	uint8_t *stack = memory + data_size;
+
+	memset(memory, 0xcc, memory_size);
     
+	for (int i = 0; i < c->p->string_count; i++)
+	{
+		memcpy(memory + c->p->strings_offset[i], c->p->strings[i],
+					strlen(c->p->strings[i]) + 1);
+	}
 
 	if (main->decl->ret_type->t != VOID)
 		regs[REG_RT].type = get_rvalue_type_from_ctype(main->decl->ret_type);
 	regs[REG_SP].u64 = (uint64_t)stack;
 	regs[REG_SP].type = RV_U64;
-    int cast = 0, op = 0, memory = 0;
+    int cast = 0, op = 0, load = 0, store = 0;
     while (1)
     {
 		//printf("at %d\n", ip);
         IR_Instruction *e = &c->instructions[ip];
         
+		if (e->node->type == NODE_STRING)
+		{
+			assert(e->op == OP_MOV && e->r1.value.type == RV_U64);
+			e->r1.value.u64 += (uint64_t)memory;
+		}
 		
 		RValue r1_value = e->r1.imm ? e->r1.value : regs[e->r1.i];
 		RValue r2_value = e->r2.imm ? e->r2.value : regs[e->r2.i];
@@ -396,7 +404,12 @@ regs[e->r0.i].type = RV_U64; \
 		}
         else if (e->op == OP_WRITE)
         {
-            print_reg_value(r1_value);
+			char *buf = (char *)r1_value.u64;
+			assert(r2_value.type == RV_U32);
+			unsigned int len = r2_value.u32;
+
+			write(1, buf, len);
+            //print_reg_value(r1_value);
             
  //           printf("\n");
             //printf("line:%d: 0x%"PRIx64"\n", e->node->token->, r1_value.u64);
@@ -415,12 +428,6 @@ regs[e->r0.i].type = RV_U64; \
         }
         else if (e->op == OP_CALL)
         {
-            if ((void *)regs[REG_SP].u64 == stack + stack_max)
-            {
-                printf("SIM ERROR: stack overflow\n");
-                err = 1;
-                break ;
-            }
             *(uint64_t *)(regs[REG_SP].u64) = ip + 1;
             regs[REG_SP].u64 += sizeof(uint64_t);
             
@@ -434,7 +441,7 @@ regs[e->r0.i].type = RV_U64; \
         else if (e->op == OP_RET)
         {
             if ((void *)regs[REG_SP].u64 == stack)
-                break ; // this is not quit right?
+                break ; // this is not quite right?
             
             regs[REG_SP].u64 -= sizeof(uint64_t);
             ip = *(uint64_t *)(regs[REG_SP].u64);
@@ -459,7 +466,7 @@ regs[e->r0.i].type = RV_U64; \
             else if (t == RV_F64) regs[e->r2.i].f64  = *(double   *)s;
             else assert(0);
             regs[e->r2.i].type = t;
-			memory++;
+			load++;
         }
         else if (e->op == OP_STORE)
         {
@@ -478,7 +485,7 @@ regs[e->r0.i].type = RV_U64; \
             else if (t == RV_F32) *(float    *)s = r2_value.f32;
             else if (t == RV_F64) *(double   *)s = r2_value.f64;
             else assert(0);
-			memory++;
+			store++;
         }
         else if (e->op == OP_CAST)
         {
@@ -511,7 +518,7 @@ F(d, 64, U, u, u), F(d, 32, U, u, u), F(d, 16, U, u, u), F(d, 8, U, u, u)
             }
             else
             {
-                #if 0
+                #if 1
             RValue cast_table[] = {
                 #if 1
                  ALL(64),
@@ -565,7 +572,8 @@ F(d, 64, U, u, u), F(d, 32, U, u, u), F(d, 16, U, u, u), F(d, 8, U, u, u)
             assert(0);
         ip++;
     }
-    free(stack);
-    printf("%d %d %d\n", cast, op, memory);
+    free(memory);
+
+    printf("\n\033[1;32mstats:\033[0m %d binops, %d loads, %d stores, %d cast\n", op, load, store, cast);
     return err;
 }

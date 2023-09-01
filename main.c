@@ -137,8 +137,8 @@ int main(int argc, char **argv)
 				close(1);
 				close(2);
 				Token *tokens = tokenize(s);	
-				Node *node = parse(tokens);
-				IR_Code *c = gen_ir_code(node);
+				Parser *p = parse(s, tokens);
+				IR_Code *c = gen_ir_code(p);
                 
 				int status = sim_ir_code(c);
 				exit(status);
@@ -181,13 +181,13 @@ int main(int argc, char **argv)
     printf("\n");
 #endif
     
-    Node *node = parse(tokens);
+    Parser *p = parse(s, tokens);
     
-    IR_Code *c = gen_ir_code(node);
+    IR_Code *c = gen_ir_code(p);
     
     print_ir_code(c);
 	
- //   sim_ir_code(c);
+    sim_ir_code(c);
 	
 	//for (int i = 0; i < c->function_count; i++)
 	//	c->functions[i].cfg = gen_function_control_flow_graph(c, &c->functions[i]);
